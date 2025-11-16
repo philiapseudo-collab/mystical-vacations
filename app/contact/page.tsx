@@ -37,7 +37,7 @@ export default function ContactPage() {
               Get in <span className="text-gold">Touch</span>
             </h1>
             <p className="text-xl text-slate-300">
-              Let's start planning your extraordinary East African adventure
+              Let&apos;s start planning your extraordinary East African adventure
             </p>
           </motion.div>
         </div>
@@ -108,7 +108,7 @@ export default function ContactPage() {
                     <div className="text-green-600 text-5xl mb-4">✓</div>
                     <h3 className="text-xl font-bold text-green-800 mb-2">Message Sent!</h3>
                     <p className="text-green-700">
-                      Thank you for contacting us. We'll get back to you shortly.
+                      Thank you for contacting us. We&apos;ll get back to you shortly.
                     </p>
                   </div>
                 ) : (

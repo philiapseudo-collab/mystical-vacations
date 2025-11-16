@@ -152,7 +152,7 @@ export default function BookConfirmPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-gold mt-0.5">✓</span>
-                <span>You'll receive a detailed itinerary and travel documents</span>
+                <span>You&apos;ll receive a detailed itinerary and travel documents</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-gold mt-0.5">✓</span>

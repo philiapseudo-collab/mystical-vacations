@@ -173,7 +173,7 @@ export default function PackageDetailPage({ params }: { params: Promise<{ slug: 
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <h3 className="text-xl font-bold text-navy mb-4">What's Included</h3>
+                    <h3 className="text-xl font-bold text-navy mb-4">What&apos;s Included</h3>
                     <ul className="space-y-2">
                       {pkg.inclusions.map((item, index) => (
                         <li key={index} className="flex items-start gap-2">
@@ -184,7 +184,7 @@ export default function PackageDetailPage({ params }: { params: Promise<{ slug: 
                     </ul>
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-navy mb-4">What's Not Included</h3>
+                    <h3 className="text-xl font-bold text-navy mb-4">What&apos;s Not Included</h3>
                     <ul className="space-y-2">
                       {pkg.exclusions.map((item, index) => (
                         <li key={index} className="flex items-start gap-2">

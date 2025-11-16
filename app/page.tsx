@@ -71,7 +71,7 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-xl md:text-2xl mb-8 text-slate-200"
           >
-            Luxury journeys through Kenya & Tanzania's most breathtaking destinations
+            Luxury journeys through Kenya & Tanzania&apos;s most breathtaking destinations
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 30 }}

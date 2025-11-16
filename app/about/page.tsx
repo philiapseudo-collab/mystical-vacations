@@ -18,7 +18,7 @@ export default function AboutPage() {
               About <span className="text-gold">Mystical Vacations</span>
             </h1>
             <p className="text-xl text-slate-300">
-              Crafting extraordinary journeys through East Africa's most breathtaking destinations since 2010
+              Crafting extraordinary journeys through East Africa&apos;s most breathtaking destinations since 2010
             </p>
           </motion.div>
         </div>
@@ -42,7 +42,7 @@ export default function AboutPage() {
                   recognized the need for luxury travel experiences that honor both the land and its people.
                 </p>
                 <p>
-                  Today, we are East Africa's premier luxury travel company, specializing in bespoke safaris, 
+                  Today, we are East Africa&apos;s premier luxury travel company, specializing in bespoke safaris, 
                   cultural immersions, and coastal escapes. Our deep local knowledge, commitment to sustainability, 
                   and partnerships with the finest lodges and camps ensure unforgettable experiences.
                 </p>
