@@ -98,7 +98,7 @@ export const BOOKING_STEPS = [
 // Default meta data
 export const DEFAULT_META = {
   siteName: 'Mystical Vacations',
-  description: 'Experience the mystical luxury of East Africa. Curated journeys through Kenya and Tanzania\'s most breathtaking destinations.',
+  description: 'Experience the mystical luxury of East Africa. Curated journeys through Kenya and Tanzania&apos;s most breathtaking destinations.',
   keywords: 'luxury travel, Kenya, Tanzania, safari, Zanzibar, Serengeti, Maasai Mara, luxury tours',
   ogImage: '/og-image.jpg',
 } as const;
