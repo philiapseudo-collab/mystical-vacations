@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #0A192F;
+  --gold: #D4AF37;
+  --navy-light: #112240;
+  --gold-light: #E5C158;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  /* Premium button styles */
+  .btn-primary {
+    @apply bg-gold hover:bg-gold-dark text-navy font-semibold px-6 py-3 rounded-md transition-all duration-300 shadow-lg hover:shadow-xl;
+  }
+  
+  .btn-secondary {
+    @apply bg-navy hover:bg-navy-light text-white font-semibold px-6 py-3 rounded-md transition-all duration-300;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-gold text-gold hover:bg-gold hover:text-navy font-semibold px-6 py-3 rounded-md transition-all duration-300;
+  }
+  
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl;
+  }
+  
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-3 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent transition-all;
+  }
+  
+  /* Premium text gradient */
+  .text-gradient {
+    @apply bg-gradient-to-r from-gold to-gold-light bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .cinematic-bg {
+    @apply relative overflow-hidden;
+  }
+  
+  .cinematic-bg::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-b from-transparent via-navy/50 to-navy/90 z-10;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gold rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gold-dark;
+}
+
