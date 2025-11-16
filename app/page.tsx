@@ -1,16 +1,44 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import OmniSearch from '@/components/OmniSearch';
 import DualCurrencyPrice from '@/components/DualCurrencyPrice';
-import { packages } from '@/data/packages';
-import { excursions } from '@/data/excursions';
+import type { IPackage, IExcursion } from '@/types';
 
 export default function Home() {
-  const featuredPackages = packages.filter((pkg) => pkg.featured).slice(0, 3);
-  const featuredExcursions = excursions.filter((exc) => exc.featured).slice(0, 4);
+  const [featuredPackages, setFeaturedPackages] = useState<IPackage[]>([]);
+  const [featuredExcursions, setFeaturedExcursions] = useState<IExcursion[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchFeaturedData() {
+      try {
+        const [packagesRes, excursionsRes] = await Promise.all([
+          fetch('/api/packages?featured=true'),
+          fetch('/api/excursions')
+        ]);
+        
+        const packagesData = await packagesRes.json();
+        const excursionsData = await excursionsRes.json();
+        
+        if (packagesData.success) {
+          setFeaturedPackages(packagesData.data.slice(0, 3));
+        }
+        
+        if (excursionsData.success) {
+          setFeaturedExcursions(excursionsData.data.filter((exc: IExcursion) => exc.featured).slice(0, 4));
+        }
+      } catch (error) {
+        console.error('Failed to fetch featured data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchFeaturedData();
+  }, []);
 
   return (
     <div className="min-h-screen">

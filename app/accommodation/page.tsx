@@ -1,16 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { accommodations } from '@/data/accommodation';
+import type { IAccommodation } from '@/types';
 import { formatPrice } from '@/utils/formatters';
 import { ACCOMMODATION_TYPES } from '@/utils/constants';
 
 export default function AccommodationPage() {
+  const [accommodations, setAccommodations] = useState<IAccommodation[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'rating'>('rating');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCountry, setFilterCountry] = useState<string>('all');
+
+  useEffect(() => {
+    async function fetchAccommodations() {
+      try {
+        const response = await fetch('/api/accommodation');
+        const data = await response.json();
+        if (data.success) {
+          setAccommodations(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch accommodations:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAccommodations();
+  }, []);
 
   // Filter and sort
   let filtered = [...accommodations];
@@ -35,6 +54,17 @@ export default function AccommodationPage() {
         return 0;
     }
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading accommodations...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

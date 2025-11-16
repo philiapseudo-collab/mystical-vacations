@@ -1,15 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { excursions } from '@/data/excursions';
+import type { IExcursion } from '@/types';
 import { formatPrice } from '@/utils/formatters';
 import { EXCURSION_CATEGORIES } from '@/utils/constants';
 
 export default function ExcursionsPage() {
+  const [excursions, setExcursions] = useState<IExcursion[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'rating' | 'duration'>('rating');
+
+  useEffect(() => {
+    async function fetchExcursions() {
+      try {
+        const response = await fetch('/api/excursions');
+        const data = await response.json();
+        if (data.success) {
+          setExcursions(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch excursions:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchExcursions();
+  }, []);
 
   // Filter and sort
   let filtered = [...excursions];
@@ -32,6 +51,17 @@ export default function ExcursionsPage() {
         return 0;
     }
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading excursions...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

@@ -1,12 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { transportRoutes } from '@/data/transport';
+import type { ITransportRoute } from '@/types';
 import { formatDuration, formatPrice, formatTime } from '@/utils/formatters';
 
 export default function TransportPage() {
+  const [transportRoutes, setTransportRoutes] = useState<ITransportRoute[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<string>('all');
+
+  useEffect(() => {
+    async function fetchTransportRoutes() {
+      try {
+        const response = await fetch('/api/transport/search');
+        const data = await response.json();
+        if (data.success) {
+          setTransportRoutes(data.data.routes);
+        }
+      } catch (error) {
+        console.error('Failed to fetch transport routes:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchTransportRoutes();
+  }, []);
 
   // Filter routes
   let filtered = [...transportRoutes];
@@ -14,6 +33,17 @@ export default function TransportPage() {
   if (filterMode !== 'all') {
     filtered = filtered.filter((route) =>
       route.segments.some((seg) => seg.mode === filterMode)
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading transport routes...</p>
+        </div>
+      </div>
     );
   }
 

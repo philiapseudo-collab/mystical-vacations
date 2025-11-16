@@ -12,10 +12,8 @@
  * - Ticket verification systems
  */
 
-import { Router, Request, Response } from 'express';
-import type { IAPIResponse, ISGRBookingRequest, ISGRBookingResponse, ISGRTicket } from '../../types';
-
-const router = Router();
+import { NextResponse } from 'next/server';
+import type { IAPIResponse, ISGRBookingRequest, ISGRBookingResponse, ISGRTicket } from '@/types';
 
 // Mock ticket store (would be database in production)
 const sgrTickets: ISGRTicket[] = [];
@@ -110,8 +108,8 @@ function generateSGRTicket(
  * 3. Generate SGR tickets upon successful payment
  * 4. Return tickets to user
  */
-router.post('/book', async (req: Request, res: Response) => {
-  const bookingRequest: ISGRBookingRequest = req.body;
+export async function POST(request: Request) {
+  const bookingRequest: ISGRBookingRequest = await request.json();
 
   // Validate request
   if (!bookingRequest.routeId || !bookingRequest.passengers || !bookingRequest.paymentToken) {
@@ -123,7 +121,7 @@ router.post('/book', async (req: Request, res: Response) => {
       },
       timestamp: new Date().toISOString(),
     };
-    return res.status(400).json(response);
+    return NextResponse.json(response, { status: 400 });
   }
 
   // Calculate total amount (mock pricing: Economy 3500 KES, First 10000 KES)
@@ -146,7 +144,7 @@ router.post('/book', async (req: Request, res: Response) => {
         },
         timestamp: new Date().toISOString(),
       };
-      return res.status(402).json(response);
+      return NextResponse.json(response, { status: 402 });
     }
 
     // Step 2: Generate tickets
@@ -183,7 +181,7 @@ router.post('/book', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     };
 
-    res.status(201).json(response);
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('[SGR] Booking error:', error);
     const response: IAPIResponse<never> = {
@@ -194,60 +192,7 @@ router.post('/book', async (req: Request, res: Response) => {
       },
       timestamp: new Date().toISOString(),
     };
-    res.status(500).json(response);
+    return NextResponse.json(response, { status: 500 });
   }
-});
-
-/**
- * GET /api/sgr/ticket/:ticketNumber
- * Retrieve ticket by ticket number
- */
-router.get('/ticket/:ticketNumber', (req: Request, res: Response) => {
-  const ticket = sgrTickets.find((t) => t.ticketNumber === req.params.ticketNumber);
-
-  if (!ticket) {
-    const response: IAPIResponse<never> = {
-      success: false,
-      error: {
-        code: 'NOT_FOUND',
-        message: 'Ticket not found',
-      },
-      timestamp: new Date().toISOString(),
-    };
-    return res.status(404).json(response);
-  }
-
-  const response: IAPIResponse<ISGRTicket> = {
-    success: true,
-    data: ticket,
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
-});
-
-/**
- * GET /api/sgr/availability
- * Check seat availability (mock)
- */
-router.get('/availability', (req: Request, res: Response) => {
-  const { routeId, date, class: classType } = req.query;
-
-  // Mock availability
-  const availableSeats = Math.floor(Math.random() * 50) + 10;
-
-  const response: IAPIResponse<{ availableSeats: number; route: string; date: string }> = {
-    success: true,
-    data: {
-      availableSeats,
-      route: routeId as string || 'Unknown',
-      date: date as string || new Date().toISOString().split('T')[0],
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
-});
-
-export default router;
+}
 

@@ -1,17 +1,47 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { packages } from '@/data/packages';
+import type { IPackage } from '@/types';
 import { formatPrice, calculateNights } from '@/utils/formatters';
 import DualCurrencyPrice from '@/components/DualCurrencyPrice';
 
 export default function PackageDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const pkg = packages.find((p) => p.slug === slug);
+  const [pkg, setPkg] = useState<IPackage | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPackage() {
+      try {
+        const response = await fetch('/api/packages');
+        const data = await response.json();
+        if (data.success) {
+          const foundPkg = data.data.find((p: IPackage) => p.slug === slug);
+          setPkg(foundPkg || null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch package:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPackage();
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading package details...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!pkg) {
     notFound();

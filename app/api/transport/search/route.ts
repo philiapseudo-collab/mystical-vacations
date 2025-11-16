@@ -1,15 +1,16 @@
-import { Router, Request, Response } from 'express';
-import { transportRoutes } from '../../data/transport';
-import type { IAPIResponse, ITransportSearchResponse } from '../../types';
-
-const router = Router();
+import { NextResponse } from 'next/server';
+import { transportRoutes } from '@/data/transport';
+import type { IAPIResponse, ITransportSearchResponse } from '@/types';
 
 /**
  * GET /api/transport/search
  * Search for transport routes
  */
-router.get('/search', (req: Request, res: Response) => {
-  const { origin, destination, mode } = req.query;
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+  const mode = searchParams.get('mode');
 
   let filtered = [...transportRoutes];
 
@@ -18,8 +19,8 @@ router.get('/search', (req: Request, res: Response) => {
       const firstSeg = route.segments[0];
       const lastSeg = route.segments[route.segments.length - 1];
       return (
-        firstSeg.departureLocation.city.toLowerCase().includes((origin as string).toLowerCase()) &&
-        lastSeg.arrivalLocation.city.toLowerCase().includes((destination as string).toLowerCase())
+        firstSeg.departureLocation.city.toLowerCase().includes(origin.toLowerCase()) &&
+        lastSeg.arrivalLocation.city.toLowerCase().includes(destination.toLowerCase())
       );
     });
   }
@@ -42,8 +43,6 @@ router.get('/search', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   };
 
-  res.json(response);
-});
-
-export default router;
+  return NextResponse.json(response);
+}
 

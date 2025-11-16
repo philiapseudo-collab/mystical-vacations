@@ -1,15 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-import { packages } from '@/data/packages';
+import type { IPackage } from '@/types';
 import DualCurrencyPrice from '@/components/DualCurrencyPrice';
 
 export default function PackagesPage() {
+  const [packages, setPackages] = useState<IPackage[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'rating' | 'duration'>('rating');
   const [filterDuration, setFilterDuration] = useState<string>('all');
+
+  // Fetch packages from API
+  useEffect(() => {
+    async function fetchPackages() {
+      try {
+        const response = await fetch('/api/packages');
+        const data = await response.json();
+        if (data.success) {
+          setPackages(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch packages:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPackages();
+  }, []);
 
   // Filter and sort packages
   let filteredPackages = [...packages];
@@ -40,6 +60,17 @@ export default function PackagesPage() {
         return 0;
     }
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading packages...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
