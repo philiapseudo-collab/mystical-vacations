@@ -75,8 +75,21 @@ export default function Footer() {
           <div>
             <h4 className="text-lg font-semibold mb-4 text-gold">Contact</h4>
             <ul className="space-y-2 text-slate-400">
-              <li>Email: info@mysticalvacations.com</li>
-              <li>Phone: +254 (0) 700 000 000</li>
+              <li>
+                <a href="mailto:info@mysticalvacationsea.com" className="hover:text-gold transition-colors">
+                  info@mysticalvacationsea.com
+                </a>
+              </li>
+              <li>
+                <a href="tel:+254718097179" className="hover:text-gold transition-colors">
+                  +254 718 097 179
+                </a>
+              </li>
+              <li>
+                <a href="tel:+254735537873" className="hover:text-gold transition-colors">
+                  +254 735 537 873
+                </a>
+              </li>
               <li>Nairobi, Kenya</li>
             </ul>
             <div className="flex space-x-4 mt-4">

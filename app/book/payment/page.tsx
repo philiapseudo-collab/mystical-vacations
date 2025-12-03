@@ -5,8 +5,10 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PriceBreakdownWidget from '@/components/PriceBreakdownWidget';
+import PaymentMethodSelector from '@/components/booking/PaymentMethodSelector';
 import { packages } from '@/data/packages';
 import { generateBookingReference } from '@/utils/formatters';
+import type { PaymentProviderName } from '@/lib/payments';
 
 export default function BookPaymentPage() {
   const router = useRouter();
@@ -21,13 +23,7 @@ export default function BookPaymentPage() {
   const [nationality, setNationality] = useState('');
 
   // Payment info
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'mpesa'>('card');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiryMonth, setExpiryMonth] = useState('');
-  const [expiryYear, setExpiryYear] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [cardholderName, setCardholderName] = useState('');
-  const [mpesaPhone, setMpesaPhone] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<PaymentProviderName | null>(null);
 
   const [processing, setProcessing] = useState(false);
 
@@ -49,23 +45,75 @@ export default function BookPaymentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!selectedProvider) {
+      alert('Please select a payment gateway');
+      return;
+    }
+
     setProcessing(true);
 
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      // Generate booking reference
+      const bookingReference = generateBookingReference();
 
-    // Generate booking reference
-    const bookingReference = generateBookingReference();
+      // Prepare payment request
+      const paymentRequest = {
+        amount: pkg.price.total,
+        currency: pkg.price.currency,
+        customerEmail: email,
+        customerPhone: phone,
+        customerName: `${firstName} ${lastName}`,
+        bookingReference,
+        provider: selectedProvider,
+        guestDetails: { firstName, lastName, email, phone, nationality },
+      };
 
-    // Store confirmation details
-    sessionStorage.setItem('bookingConfirmation', JSON.stringify({
-      ...bookingDetails,
-      guestDetails: { firstName, lastName, email, phone, nationality },
-      bookingReference,
-      paymentMethod,
-    }));
+      // Call payment API
+      const response = await fetch('/api/payment/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentRequest),
+      });
 
-    router.push('/book/confirm');
+      const data = await response.json();
+
+      if (data.success && data.data.success) {
+        // Store confirmation details
+        sessionStorage.setItem('bookingConfirmation', JSON.stringify({
+          ...bookingDetails,
+          guestDetails: { firstName, lastName, email, phone, nationality },
+          bookingReference,
+          paymentProvider: selectedProvider,
+          transactionId: data.data.transactionId,
+          paymentStatus: data.data.paymentStatus,
+        }));
+
+        // If payment URL is provided, redirect to payment gateway
+        if (data.data.paymentUrl) {
+          // Redirect to payment gateway
+          window.location.href = data.data.paymentUrl;
+        } else {
+          // If no redirect needed, go to confirmation
+          router.push('/book/confirm');
+        }
+      } else {
+        // Handle API error response
+        const errorMessage = data.error?.message || data.message || 'Payment processing failed. Please try again.';
+        alert(errorMessage);
+        setProcessing(false);
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      // Handle network errors or thrown exceptions
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'An error occurred while processing payment. Please try again.';
+      alert(errorMessage);
+      setProcessing(false);
+    }
   };
 
   return (
@@ -145,7 +193,7 @@ export default function BookPaymentPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     className="input"
-                    placeholder="+254 700 000 000"
+                    placeholder="+254 XXX XXX XXX"
                     required
                   />
                 </div>
@@ -174,137 +222,13 @@ export default function BookPaymentPage() {
             >
               <h2 className="text-2xl font-serif font-bold text-navy mb-6">Payment Method</h2>
               
-              {/* Payment Method Selector */}
-              <div className="flex gap-4 mb-6">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('card')}
-                  className={`flex-1 p-4 border-2 rounded-lg transition-all ${
-                    paymentMethod === 'card'
-                      ? 'border-gold bg-gold/5'
-                      : 'border-slate-300 hover:border-gold/50'
-                  }`}
-                >
-                  <div className="text-center">
-                    <p className="font-semibold text-navy">💳 Credit/Debit Card</p>
-                    <p className="text-xs text-slate-600 mt-1">Visa, Mastercard</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('mpesa')}
-                  className={`flex-1 p-4 border-2 rounded-lg transition-all ${
-                    paymentMethod === 'mpesa'
-                      ? 'border-gold bg-gold/5'
-                      : 'border-slate-300 hover:border-gold/50'
-                  }`}
-                >
-                  <div className="text-center">
-                    <p className="font-semibold text-navy">📱 M-Pesa</p>
-                    <p className="text-xs text-slate-600 mt-1">Mobile payment</p>
-                  </div>
-                </button>
-              </div>
+              {/* Payment Gateway Selector */}
+              <PaymentMethodSelector
+                selectedProvider={selectedProvider}
+                onProviderSelect={setSelectedProvider}
+              />
 
-              <form onSubmit={handleSubmit}>
-                {paymentMethod === 'card' ? (
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="cardNumber" className="block text-sm font-semibold text-navy mb-2">
-                        Card Number *
-                      </label>
-                      <input
-                        type="text"
-                        id="cardNumber"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        className="input"
-                        placeholder="1234 5678 9012 3456"
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label htmlFor="expiryMonth" className="block text-sm font-semibold text-navy mb-2">
-                          Month *
-                        </label>
-                        <input
-                          type="text"
-                          id="expiryMonth"
-                          value={expiryMonth}
-                          onChange={(e) => setExpiryMonth(e.target.value)}
-                          className="input"
-                          placeholder="MM"
-                          maxLength={2}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="expiryYear" className="block text-sm font-semibold text-navy mb-2">
-                          Year *
-                        </label>
-                        <input
-                          type="text"
-                          id="expiryYear"
-                          value={expiryYear}
-                          onChange={(e) => setExpiryYear(e.target.value)}
-                          className="input"
-                          placeholder="YY"
-                          maxLength={2}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="cvv" className="block text-sm font-semibold text-navy mb-2">
-                          CVV *
-                        </label>
-                        <input
-                          type="text"
-                          id="cvv"
-                          value={cvv}
-                          onChange={(e) => setCvv(e.target.value)}
-                          className="input"
-                          placeholder="123"
-                          maxLength={4}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="cardholderName" className="block text-sm font-semibold text-navy mb-2">
-                        Cardholder Name *
-                      </label>
-                      <input
-                        type="text"
-                        id="cardholderName"
-                        value={cardholderName}
-                        onChange={(e) => setCardholderName(e.target.value)}
-                        className="input"
-                        placeholder="Name on card"
-                        required
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label htmlFor="mpesaPhone" className="block text-sm font-semibold text-navy mb-2">
-                      M-Pesa Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      id="mpesaPhone"
-                      value={mpesaPhone}
-                      onChange={(e) => setMpesaPhone(e.target.value)}
-                      className="input"
-                      placeholder="+254 700 000 000"
-                      required
-                    />
-                    <p className="text-sm text-slate-600 mt-2">
-                      You will receive an M-Pesa prompt on your phone to complete payment.
-                    </p>
-                  </div>
-                )}
-
+              <form onSubmit={handleSubmit} className="mt-6">
                 <div className="mt-6 p-4 bg-slate-50 rounded-lg">
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input type="checkbox" className="mt-1" required />
@@ -323,7 +247,7 @@ export default function BookPaymentPage() {
                   </Link>
                   <button
                     type="submit"
-                    disabled={processing}
+                    disabled={processing || !selectedProvider}
                     className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {processing ? 'Processing...' : 'Complete Payment →'}

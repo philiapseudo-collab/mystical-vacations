@@ -58,13 +58,25 @@ export default function ContactPage() {
                 <div className="space-y-4 text-slate-700">
                   <div>
                     <p className="font-semibold text-navy mb-1">📧 Email</p>
-                    <a href="mailto:info@mysticalvacations.com" className="text-gold hover:underline">
-                      info@mysticalvacations.com
-                    </a>
+                    <div className="space-y-1">
+                      <a href="mailto:info@mysticalvacationsea.com" className="text-gold hover:underline block">
+                        info@mysticalvacationsea.com
+                      </a>
+                      <a href="mailto:admin@mysticalvacationsea.com" className="text-gold hover:underline block">
+                        admin@mysticalvacationsea.com
+                      </a>
+                    </div>
                   </div>
                   <div>
                     <p className="font-semibold text-navy mb-1">📞 Phone</p>
-                    <p>+254 (0) 700 000 000</p>
+                    <div className="space-y-1">
+                      <a href="tel:+254718097179" className="text-gold hover:underline block">
+                        +254 718 097 179
+                      </a>
+                      <a href="tel:+254735537873" className="text-gold hover:underline block">
+                        +254 735 537 873
+                      </a>
+                    </div>
                   </div>
                   <div>
                     <p className="font-semibold text-navy mb-1">📍 Address</p>

@@ -148,12 +148,18 @@ export default function PackagesPage() {
                 <Link href={`/packages/${pkg.slug}`}>
                   <div className="card group cursor-pointer h-full flex flex-col">
                     <div className="relative h-64 overflow-hidden">
-                      <Image
-                        src={pkg.images[0].url}
-                        alt={pkg.images[0].alt}
-                        fill
-                        className="object-cover transition-transform duration-500 group-hover:scale-110"
-                      />
+                      {pkg.images && pkg.images.length > 0 && pkg.images[0]?.url ? (
+                        <Image
+                          src={pkg.images[0].url}
+                          alt={pkg.images[0].alt || pkg.title}
+                          fill
+                          className="object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-200 flex items-center justify-center">
+                          <span className="text-slate-400">No image</span>
+                        </div>
+                      )}
                       {pkg.featured && (
                         <div className="absolute top-4 left-4 bg-gold text-navy px-3 py-1 rounded-full text-sm font-semibold">
                           Featured

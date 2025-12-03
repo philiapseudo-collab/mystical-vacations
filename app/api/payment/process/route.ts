@@ -1,46 +1,123 @@
 import { NextResponse } from 'next/server';
-import type { IAPIResponse, IPaymentRequest, IPaymentResponse } from '@/types';
+import type { IAPIResponse } from '@/types';
+import { getPaymentProvider, isValidPaymentProvider } from '@/lib/payments';
+import type { IPaymentInitiateRequest, IPaymentInitiateResponse } from '@/lib/payments';
 
 /**
  * POST /api/payment/process
- * Process payment (mock implementation)
+ * Process payment using selected payment provider (PesaPal or Flutterwave)
  * 
- * This simulates payment gateway integration (Stripe/Visa)
- * In production, this would integrate with actual payment processors
+ * Request body:
+ * {
+ *   amount: number;
+ *   currency: string;
+ *   customerEmail: string;
+ *   customerPhone: string;
+ *   customerName: string;
+ *   bookingReference: string;
+ *   provider: 'pesapal' | 'flutterwave';
+ *   metadata?: Record<string, any>;
+ * }
  */
 export async function POST(request: Request) {
-  const paymentRequest: IPaymentRequest = await request.json();
+  try {
+    const body = await request.json();
+    const {
+      amount,
+      currency,
+      customerEmail,
+      customerPhone,
+      customerName,
+      bookingReference,
+      provider,
+      metadata,
+    } = body;
 
-  // Simulate processing delay
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Validate required fields
+    if (!amount || amount <= 0) {
+      const response: IAPIResponse<never> = {
+        success: false,
+        error: {
+          code: 'INVALID_AMOUNT',
+          message: 'Invalid payment amount',
+        },
+        timestamp: new Date().toISOString(),
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
 
-  // Mock validation
-  if (!paymentRequest.amount || paymentRequest.amount <= 0) {
+    if (!provider || !isValidPaymentProvider(provider)) {
+      const response: IAPIResponse<never> = {
+        success: false,
+        error: {
+          code: 'INVALID_PROVIDER',
+          message: 'Invalid payment provider. Must be "pesapal" or "flutterwave"',
+        },
+        timestamp: new Date().toISOString(),
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+
+    if (!customerEmail || !customerPhone || !customerName || !bookingReference) {
+      const response: IAPIResponse<never> = {
+        success: false,
+        error: {
+          code: 'MISSING_FIELDS',
+          message: 'Missing required fields: customerEmail, customerPhone, customerName, bookingReference',
+        },
+        timestamp: new Date().toISOString(),
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+
+    // Get the payment provider instance
+    const paymentProvider = getPaymentProvider(provider);
+
+    // Prepare payment initiation request
+    const paymentRequest: IPaymentInitiateRequest = {
+      amount,
+      currency: currency || 'USD',
+      customerEmail,
+      customerPhone,
+      customerName,
+      bookingReference,
+      metadata,
+    };
+
+    // Initiate payment with the selected provider
+    const paymentResult: IPaymentInitiateResponse = await paymentProvider.initiatePayment(paymentRequest);
+
+    if (!paymentResult.success) {
+      const response: IAPIResponse<never> = {
+        success: false,
+        error: {
+          code: 'PAYMENT_INITIATION_FAILED',
+          message: paymentResult.message || 'Failed to initiate payment',
+        },
+        timestamp: new Date().toISOString(),
+      };
+      return NextResponse.json(response, { status: 500 });
+    }
+
+    // Return successful response
+    const response: IAPIResponse<IPaymentInitiateResponse> = {
+      success: true,
+      data: paymentResult,
+      timestamp: new Date().toISOString(),
+    };
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Payment processing error:', error);
     const response: IAPIResponse<never> = {
       success: false,
       error: {
-        code: 'INVALID_AMOUNT',
-        message: 'Invalid payment amount',
+        code: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
       },
       timestamp: new Date().toISOString(),
     };
-    return NextResponse.json(response, { status: 400 });
+    return NextResponse.json(response, { status: 500 });
   }
-
-  // Mock successful payment
-  const paymentResponse: IPaymentResponse = {
-    success: true,
-    transactionId: `txn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    paymentStatus: 'completed',
-    message: 'Payment processed successfully',
-  };
-
-  const response: IAPIResponse<IPaymentResponse> = {
-    success: true,
-    data: paymentResponse,
-    timestamp: new Date().toISOString(),
-  };
-
-  return NextResponse.json(response);
 }
 

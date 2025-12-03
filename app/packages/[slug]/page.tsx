@@ -52,13 +52,19 @@ export default function PackageDetailPage({ params }: { params: Promise<{ slug: 
       {/* Hero Section */}
       <section className="relative h-[60vh] flex items-end cinematic-bg">
         <div className="absolute inset-0 z-0">
-          <Image
-            src={pkg.images[0].url}
-            alt={pkg.images[0].alt}
-            fill
-            className="object-cover"
-            priority
-          />
+          {pkg.images && pkg.images.length > 0 && pkg.images[0]?.url ? (
+            <Image
+              src={pkg.images[0].url}
+              alt={pkg.images[0].alt || pkg.title}
+              fill
+              className="object-cover"
+              priority
+            />
+          ) : (
+            <div className="w-full h-full bg-slate-300 flex items-center justify-center">
+              <span className="text-slate-500">No image available</span>
+            </div>
+          )}
         </div>
         
         <div className="relative z-20 container mx-auto px-4 pb-12">

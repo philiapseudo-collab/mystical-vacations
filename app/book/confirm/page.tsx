@@ -190,8 +190,20 @@ export default function BookConfirmPage() {
           className="text-center mt-12 text-slate-600"
         >
           <p className="mb-2">Need help? Contact us:</p>
-          <p className="font-semibold">📧 bookings@mysticalvacations.com</p>
-          <p className="font-semibold">📞 +254 (0) 700 000 000</p>
+          <p className="font-semibold">
+            <a href="mailto:admin@mysticalvacationsea.com" className="text-gold hover:underline">
+              📧 admin@mysticalvacationsea.com
+            </a>
+          </p>
+          <p className="font-semibold">
+            <a href="tel:+254718097179" className="text-gold hover:underline">
+              📞 +254 718 097 179
+            </a>
+            {' | '}
+            <a href="tel:+254735537873" className="text-gold hover:underline">
+              +254 735 537 873
+            </a>
+          </p>
         </motion.div>
       </div>
     </div>
