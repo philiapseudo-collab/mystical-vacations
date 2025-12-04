@@ -7,6 +7,15 @@ import { PesaPalProvider } from './pesapal';
 import { FlutterwaveProvider } from './flutterwave';
 import type { IPaymentProvider } from './types';
 
+// Re-export types for convenience
+export type {
+  IPaymentProvider,
+  IPaymentInitiateRequest,
+  IPaymentInitiateResponse,
+  IPaymentVerifyRequest,
+  IPaymentVerifyResponse,
+} from './types';
+
 export type PaymentProviderName = 'pesapal' | 'flutterwave';
 
 /**

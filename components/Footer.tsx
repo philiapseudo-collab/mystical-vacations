@@ -6,7 +6,7 @@ export default function Footer() {
   return (
     <footer className="bg-navy text-white mt-auto">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Brand */}
           <div>
             <h3 className="text-2xl font-serif font-bold mb-4">
@@ -58,15 +58,27 @@ export default function Footer() {
                   Contact
                 </Link>
               </li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h4 className="text-lg font-semibold mb-4 text-gold">Legal</h4>
+            <ul className="space-y-2">
               <li>
-                <a href="#" className="text-slate-400 hover:text-gold transition-colors">
-                  Terms & Conditions
-                </a>
+                <Link href="/legal/terms" className="text-slate-400 hover:text-gold transition-colors">
+                  Terms of Service
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-400 hover:text-gold transition-colors">
+                <Link href="/legal/privacy" className="text-slate-400 hover:text-gold transition-colors">
                   Privacy Policy
-                </a>
+                </Link>
+              </li>
+              <li>
+                <Link href="/legal/refund" className="text-slate-400 hover:text-gold transition-colors">
+                  Refund Policy
+                </Link>
               </li>
             </ul>
           </div>

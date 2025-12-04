@@ -13,10 +13,48 @@ import type {
   IPaymentVerifyResponse,
 } from './types';
 
+/**
+ * Simple PesaPal Order Interface
+ * Simplified input for payment initiation
+ */
+export interface PesaPalOrder {
+  amount: number;
+  email: string;
+  phone: string;
+  description: string;
+  reference: string;
+  callbackUrl?: string;
+  currency?: string; // Defaults to 'KES' if not provided
+  customerName?: string; // Optional, will be derived from email if not provided
+}
+
+/**
+ * PesaPal Payment Initiation Response
+ * Returns the redirect URL and order tracking ID for database storage
+ */
+export interface PesaPalPaymentResponse {
+  redirectUrl: string;
+  orderTrackingId: string;
+}
+
 interface PesaPalAccessTokenResponse {
   token: string;
   expiryDate: string;
 }
+
+/**
+ * Token Cache (In-Memory Singleton)
+ * Helps with Vercel serverless warm starts
+ */
+interface TokenCache {
+  token: string | null;
+  expiryTime: number; // Unix timestamp in milliseconds
+}
+
+let tokenCache: TokenCache = {
+  token: null,
+  expiryTime: 0,
+};
 
 interface PesaPalSubmitOrderResponse {
   orderTrackingId: string;
@@ -54,10 +92,19 @@ export class PesaPalProvider implements IPaymentProvider {
   }
 
   /**
-   * Get access token from PesaPal
+   * Get access token from PesaPal with caching
    * POST /api/Auth/RequestToken
+   * 
+   * Uses in-memory cache to reduce API calls during Vercel warm starts
    */
   private async getAccessToken(): Promise<string> {
+    const now = Date.now();
+    
+    // Check if we have a valid cached token
+    if (tokenCache.token && tokenCache.expiryTime > now) {
+      return tokenCache.token;
+    }
+
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
 
@@ -92,8 +139,27 @@ export class PesaPalProvider implements IPaymentProvider {
         throw new Error('PesaPal Auth Failed: Invalid response - token not found');
       }
 
+      // Cache the token
+      // PesaPal tokens typically expire in 1 hour, but we'll set expiry to 55 minutes for safety
+      // If expiryDate is provided, parse it; otherwise use 55 minutes from now
+      let expiryTime: number;
+      if (data.expiryDate) {
+        expiryTime = new Date(data.expiryDate).getTime();
+      } else {
+        // Default to 55 minutes from now (3300 seconds)
+        expiryTime = now + (55 * 60 * 1000);
+      }
+
+      tokenCache = {
+        token: data.token,
+        expiryTime: expiryTime,
+      };
+
       return data.token;
     } catch (error) {
+      // Clear cache on error
+      tokenCache = { token: null, expiryTime: 0 };
+      
       if (error instanceof Error) {
         throw new Error(`PesaPal Auth Failed: ${error.message}`);
       }
@@ -102,22 +168,21 @@ export class PesaPalProvider implements IPaymentProvider {
   }
 
   /**
-   * Initiate payment with PesaPal
-   * Merchant Fees: ~3.5% (Card) / ~2.9% - 3.5% (M-Pesa)
-   * Settlement: T+2 Days (Bank) or Real-time to Openfloat
+   * Simple payment initiation with PesaPal
+   * Returns redirect URL and order tracking ID for database storage
    * 
-   * POST /api/Transactions/SubmitOrderRequest
+   * @param order - Simple PesaPal order object
+   * @returns Object with redirectUrl and orderTrackingId
+   * @throws Error if PesaPal API fails or credentials are invalid
    */
-  async initiatePayment(
-    request: IPaymentInitiateRequest
-  ): Promise<IPaymentInitiateResponse> {
+  async initiatePaymentSimple(order: PesaPalOrder): Promise<PesaPalPaymentResponse> {
     try {
-      // Get access token first
+      // Get access token (with caching)
       const accessToken = await this.getAccessToken();
 
-      // Get callback URL
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const callbackUrl = `${appUrl}/book/payment/callback`;
+      // Get callback URL (use provided or default)
+      const callbackUrl = order.callbackUrl || 
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/book/payment/callback`;
 
       // Get IPN ID from environment
       const ipnId = process.env.PESAPAL_IPN_ID;
@@ -125,22 +190,28 @@ export class PesaPalProvider implements IPaymentProvider {
       // Generate unique order ID
       const orderId = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-      // Prepare request payload according to PesaPal API 3.0
+      // Derive customer name from email if not provided
+      const customerName = order.customerName || order.email.split('@')[0] || 'Customer';
+      const nameParts = customerName.split(' ');
+      const firstName = nameParts[0] || customerName;
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Prepare request payload according to PesaPal API 3.0 (JSON format)
       const payload = {
         id: orderId,
-        currency: request.currency,
-        amount: request.amount,
-        description: `Payment for booking: ${request.bookingReference}`,
+        currency: order.currency || 'KES',
+        amount: order.amount,
+        description: order.description,
         callback_url: callbackUrl,
-        redirect_mode: 'PARENT_WINDOW', // or 'NEW_WINDOW'
-        notification_id: ipnId || '', // Optional but recommended
+        redirect_mode: 'PARENT_WINDOW',
+        notification_id: ipnId || '',
         billing_address: {
-          email_address: request.customerEmail,
-          phone_number: request.customerPhone,
-          country_code: 'KE', // Default to Kenya, can be made dynamic
-          first_name: request.customerName.split(' ')[0] || request.customerName,
+          email_address: order.email,
+          phone_number: order.phone,
+          country_code: 'KE', // Default to Kenya
+          first_name: firstName,
           middle_name: '',
-          last_name: request.customerName.split(' ').slice(1).join(' ') || '',
+          last_name: lastName,
           line_1: '',
           line_2: '',
           city: '',
@@ -175,9 +246,47 @@ export class PesaPalProvider implements IPaymentProvider {
       }
 
       return {
+        redirectUrl: data.redirectUrl,
+        orderTrackingId: data.orderTrackingId,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to initiate PesaPal payment: Unknown error occurred');
+    }
+  }
+
+  /**
+   * Initiate payment with PesaPal (IPaymentProvider interface implementation)
+   * Merchant Fees: ~3.5% (Card) / ~2.9% - 3.5% (M-Pesa)
+   * Settlement: T+2 Days (Bank) or Real-time to Openfloat
+   * 
+   * POST /api/Transactions/SubmitOrderRequest
+   */
+  async initiatePayment(
+    request: IPaymentInitiateRequest
+  ): Promise<IPaymentInitiateResponse> {
+    try {
+      // Convert IPaymentInitiateRequest to PesaPalOrder format
+      const order: PesaPalOrder = {
+        amount: request.amount,
+        email: request.customerEmail,
+        phone: request.customerPhone,
+        description: `Payment for booking: ${request.bookingReference}`,
+        reference: request.bookingReference,
+        currency: request.currency || 'KES',
+        customerName: request.customerName,
+      };
+
+      // Use the simple method internally
+      const result = await this.initiatePaymentSimple(order);
+
+      // Return in IPaymentInitiateResponse format for interface compatibility
+      return {
         success: true,
-        transactionId: data.orderTrackingId,
-        paymentUrl: data.redirectUrl,
+        transactionId: result.orderTrackingId,
+        paymentUrl: result.redirectUrl,
         paymentStatus: 'initiated',
         message: 'Payment initiated with PesaPal. You will be redirected to complete payment.',
         provider: 'pesapal',
