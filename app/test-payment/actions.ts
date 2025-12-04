@@ -1,0 +1,84 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import { PesaPalProvider } from '@/lib/payments/pesapal';
+import { prisma } from '@/lib/prisma';
+
+/**
+ * Server Action: Initiate Test Payment
+ * 
+ * Creates a test payment of 10 KES using PesaPal
+ * Redirects to PesaPal checkout page on success
+ */
+export async function initiateTestPayment(): Promise<
+  | { success: false; error: string }
+  | never // Never returns on success - redirects instead
+> {
+  let redirectUrl: string;
+  let orderTrackingId: string;
+
+  try {
+    // Create PesaPal provider instance
+    const pesapal = new PesaPalProvider();
+
+    // Generate test reference
+    const testReference = `TEST-${Date.now()}`;
+
+    // Prepare test order
+    const testOrder = {
+      amount: 10,
+      currency: 'KES',
+      email: 'test@mysticalvacationsea.com',
+      phone: '0700000000',
+      description: 'System Test - 10 Bob',
+      reference: testReference,
+    };
+
+    // Initiate payment
+    const result = await pesapal.initiatePaymentSimple(testOrder);
+
+    // Store values for logging before redirect
+    redirectUrl = result.redirectUrl;
+    orderTrackingId = result.orderTrackingId;
+
+    // Create Order record in database with PENDING status
+    // This allows us to track abandoned checkouts
+    await prisma.order.create({
+      data: {
+        amount: testOrder.amount,
+        currency: testOrder.currency,
+        status: 'PENDING',
+        pesapalOrderTrackingId: orderTrackingId,
+        customerEmail: testOrder.email,
+        customerPhone: testOrder.phone,
+        description: testOrder.description,
+        reference: testReference,
+      },
+    });
+
+    // Log the order tracking ID for debugging
+    console.log('✅ Test Payment Initiated:', {
+      orderTrackingId: result.orderTrackingId,
+      redirectUrl: result.redirectUrl,
+      reference: testReference,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Failed to initiate test payment: Unknown error occurred';
+
+    console.error('❌ Test Payment Error:', errorMessage);
+
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+
+  // Call redirect() AFTER the try/catch block
+  // This prevents Next.js from treating the redirect as an error
+  redirect(redirectUrl);
+}
+

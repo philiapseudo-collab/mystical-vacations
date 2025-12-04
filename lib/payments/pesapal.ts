@@ -57,10 +57,17 @@ let tokenCache: TokenCache = {
 };
 
 interface PesaPalSubmitOrderResponse {
-  orderTrackingId: string;
-  redirectUrl: string;
-  status: string;
-  message: string;
+  orderTrackingId?: string;
+  redirectUrl?: string;
+  order_tracking_id?: string; // PesaPal v3 may return snake_case
+  redirect_url?: string; // PesaPal v3 may return snake_case
+  status?: string;
+  message?: string;
+  error?: {
+    type?: string;
+    code?: string;
+    message?: string;
+  };
 }
 
 interface PesaPalTransactionStatusResponse {
@@ -241,13 +248,34 @@ export class PesaPalProvider implements IPaymentProvider {
 
       const data: PesaPalSubmitOrderResponse = await response.json();
 
-      if (!data.orderTrackingId || !data.redirectUrl) {
-        throw new Error('PesaPal Payment Initiation Failed: Invalid response - missing orderTrackingId or redirectUrl');
+      // Log the raw response for debugging
+      console.log('🔍 PesaPal SubmitOrderRequest Raw Response:', JSON.stringify(data, null, 2));
+
+      // Handle both camelCase and snake_case field names
+      const orderTrackingId = data.orderTrackingId || data.order_tracking_id;
+      const redirectUrl = data.redirectUrl || data.redirect_url;
+
+      // Check for error in response
+      if (data.error) {
+        throw new Error(
+          `PesaPal Payment Initiation Failed: ${data.error.message || data.error.type || 'Unknown error'}`
+        );
+      }
+
+      if (!orderTrackingId || !redirectUrl) {
+        console.error('❌ PesaPal Response Missing Fields:', {
+          hasOrderTrackingId: !!orderTrackingId,
+          hasRedirectUrl: !!redirectUrl,
+          fullResponse: data,
+        });
+        throw new Error(
+          'PesaPal Payment Initiation Failed: Invalid response - missing orderTrackingId or redirectUrl. Check server logs for full response.'
+        );
       }
 
       return {
-        redirectUrl: data.redirectUrl,
-        orderTrackingId: data.orderTrackingId,
+        redirectUrl,
+        orderTrackingId,
       };
     } catch (error) {
       if (error instanceof Error) {
