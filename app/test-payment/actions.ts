@@ -45,6 +45,7 @@ export async function initiateTestPayment(): Promise<
     // This allows us to track abandoned checkouts
     await prisma.order.create({
       data: {
+        id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         amount: testOrder.amount,
         currency: testOrder.currency,
         status: 'PENDING',

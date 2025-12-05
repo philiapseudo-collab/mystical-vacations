@@ -74,7 +74,6 @@ export async function POST(request: Request) {
           where: { pesapalOrderTrackingId: transactionId },
           data: {
             status: verifyResult.paymentStatus.toUpperCase(),
-            updatedAt: new Date(),
           },
         });
       } catch (dbError) {

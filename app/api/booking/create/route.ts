@@ -14,9 +14,9 @@ export async function POST(request: Request) {
     const bookingRecord = await prisma.booking.create({
       data: {
         bookingReference: bookingData.bookingReference,
-        items: bookingData.items as IBookingItem[],
-        guestDetails: bookingData.guestDetails,
-        priceBreakdown: bookingData.priceBreakdown as IPriceBreakdown,
+        items: bookingData.items as unknown as any,
+        guestDetails: bookingData.guestDetails as unknown as any,
+        priceBreakdown: bookingData.priceBreakdown as unknown as any,
         status: 'pending',
         paymentStatus: 'pending',
       },
@@ -26,9 +26,9 @@ export async function POST(request: Request) {
     const booking: IBooking = {
       id: bookingRecord.id,
       bookingReference: bookingRecord.bookingReference,
-      items: bookingRecord.items as IBookingItem[],
-      guestDetails: bookingRecord.guestDetails as IBooking['guestDetails'],
-      priceBreakdown: bookingRecord.priceBreakdown as IPriceBreakdown,
+      items: bookingRecord.items as unknown as IBookingItem[],
+      guestDetails: bookingRecord.guestDetails as unknown as IBooking['guestDetails'],
+      priceBreakdown: bookingRecord.priceBreakdown as unknown as IPriceBreakdown,
       status: bookingRecord.status as IBooking['status'],
       createdAt: bookingRecord.createdAt.toISOString(),
       updatedAt: bookingRecord.updatedAt.toISOString(),

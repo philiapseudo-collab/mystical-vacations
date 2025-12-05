@@ -1,28 +1,28 @@
 import { PrismaClient } from "@prisma/client";
 
 /**
- * Prisma Client Singleton
- *
- * Prevents "Too Many Connections" errors during Next.js hot-reloading.
+ * Prisma Client Singleton for Next.js
+ * 
+ * Prevents "Too Many Connections" errors during development hot-reloading.
+ * Compatible with Prisma 7.x and Vercel serverless functions.
  */
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+
+const prismaClientSingleton = () => {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === "development" 
+      ? ["query", "error", "warn"] 
+      : ["error"],
+  });
 };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
-  });
+declare const globalThis: {
+  prismaGlobal: ReturnType<typeof prismaClientSingleton>;
+} & typeof global;
+
+const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
+
+export { prisma };
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  globalThis.prismaGlobal = prisma;
 }

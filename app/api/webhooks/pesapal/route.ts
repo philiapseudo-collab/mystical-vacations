@@ -96,7 +96,6 @@ export async function POST(request: Request) {
           where: { pesapalOrderTrackingId: orderTrackingId },
           data: {
             status: 'COMPLETED',
-            updatedAt: new Date(),
           },
         });
         console.log('✅ Database updated: Order marked as COMPLETED');
@@ -116,7 +115,6 @@ export async function POST(request: Request) {
           where: { pesapalOrderTrackingId: orderTrackingId },
           data: {
             status: 'PENDING',
-            updatedAt: new Date(),
           },
         });
       } catch (dbError) {
@@ -134,7 +132,6 @@ export async function POST(request: Request) {
           where: { pesapalOrderTrackingId: orderTrackingId },
           data: {
             status: 'FAILED',
-            updatedAt: new Date(),
           },
         });
       } catch (dbError) {
@@ -152,7 +149,6 @@ export async function POST(request: Request) {
           where: { pesapalOrderTrackingId: orderTrackingId },
           data: {
             status: 'CANCELLED',
-            updatedAt: new Date(),
           },
         });
       } catch (dbError) {

@@ -32,9 +32,9 @@ export async function GET(
     const booking: IBooking = {
       id: bookingRecord.id,
       bookingReference: bookingRecord.bookingReference,
-      items: bookingRecord.items as IBookingItem[],
-      guestDetails: bookingRecord.guestDetails as IBooking['guestDetails'],
-      priceBreakdown: bookingRecord.priceBreakdown as IPriceBreakdown,
+      items: bookingRecord.items as unknown as IBookingItem[],
+      guestDetails: bookingRecord.guestDetails as unknown as IBooking['guestDetails'],
+      priceBreakdown: bookingRecord.priceBreakdown as unknown as IPriceBreakdown,
       status: bookingRecord.status as IBooking['status'],
       createdAt: bookingRecord.createdAt.toISOString(),
       updatedAt: bookingRecord.updatedAt.toISOString(),
