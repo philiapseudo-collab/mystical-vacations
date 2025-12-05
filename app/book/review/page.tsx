@@ -11,13 +11,35 @@ import { packages } from '@/data/packages';
 function BookReviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const packageId = searchParams?.get('package');
+  const packageIdFromUrl = searchParams?.get('package');
+  const guestsFromUrl = searchParams?.get('guests');
+  const dateFromUrl = searchParams?.get('dateFrom');
 
-  const [guests, setGuests] = useState(2);
-  const [dateFrom, setDateFrom] = useState('');
+  // Initialize state with URL params first, then sessionStorage, then defaults
+  const [guests, setGuests] = useState(
+    guestsFromUrl ? parseInt(guestsFromUrl) : 2
+  );
+  const [dateFrom, setDateFrom] = useState(dateFromUrl || '');
   const [specialRequests, setSpecialRequests] = useState('');
 
-  const pkg = packages.find((p) => p.id === packageId);
+  const pkg = packages.find((p) => p.id === packageIdFromUrl);
+
+  // Restore from sessionStorage if URL params are not present
+  useEffect(() => {
+    if (!guestsFromUrl || !dateFromUrl) {
+      const stored = sessionStorage.getItem('bookingDetails');
+      if (stored) {
+        const details = JSON.parse(stored);
+        if (!guestsFromUrl) {
+          setGuests(details.guests || 2);
+        }
+        if (!dateFromUrl) {
+          setDateFrom(details.dateFrom || '');
+        }
+        setSpecialRequests(details.specialRequests || '');
+      }
+    }
+  }, [guestsFromUrl, dateFromUrl]);
 
   useEffect(() => {
     if (!pkg) {
@@ -31,14 +53,15 @@ function BookReviewContent() {
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
-    // Store booking details in sessionStorage for next step
+    // Store booking details in sessionStorage (includes specialRequests)
     sessionStorage.setItem('bookingDetails', JSON.stringify({
       packageId: pkg.id,
       guests,
       dateFrom,
       specialRequests,
     }));
-    router.push('/book/payment');
+    // Navigate with URL params (critical data only, no specialRequests)
+    router.push(`/book/payment?packageId=${encodeURIComponent(pkg.id)}&guests=${guests}&dateFrom=${encodeURIComponent(dateFrom)}`);
   };
 
   return (

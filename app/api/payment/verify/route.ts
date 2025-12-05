@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server';
 import type { IAPIResponse } from '@/types';
-import { getPaymentProvider, isValidPaymentProvider } from '@/lib/payments';
+import { getPaymentProvider } from '@/lib/payments';
 import type { IPaymentVerifyRequest, IPaymentVerifyResponse } from '@/lib/payments';
 import { prisma } from '@/lib/prisma';
 
 /**
  * POST /api/payment/verify
- * Verify payment status using the appropriate payment provider
+ * Verify payment status using PesaPal
  * 
  * Request body:
  * {
  *   transactionId: string;
- *   provider: 'pesapal' | 'flutterwave';
  * }
  */
 export async function POST(request: Request) {
   try {
-    const { transactionId, provider } = await request.json();
+    const { transactionId } = await request.json();
 
     if (!transactionId) {
       const response: IAPIResponse<never> = {
@@ -24,18 +23,6 @@ export async function POST(request: Request) {
         error: {
           code: 'MISSING_TRANSACTION_ID',
           message: 'Transaction ID is required',
-        },
-        timestamp: new Date().toISOString(),
-      };
-      return NextResponse.json(response, { status: 400 });
-    }
-
-    if (!provider || !isValidPaymentProvider(provider)) {
-      const response: IAPIResponse<never> = {
-        success: false,
-        error: {
-          code: 'INVALID_PROVIDER',
-          message: 'Invalid payment provider. Must be "pesapal" or "flutterwave"',
         },
         timestamp: new Date().toISOString(),
       };
@@ -70,11 +57,11 @@ export async function POST(request: Request) {
 
     // Step 3: If DB says PENDING (or not found), call PesaPal API (fallback)
     // This handles cases where webhook failed or payment status changed
-    const paymentProvider = getPaymentProvider(provider);
+    const paymentProvider = getPaymentProvider();
 
     const verifyRequest: IPaymentVerifyRequest = {
       transactionId,
-      provider,
+      provider: 'pesapal',
     };
 
     // Verify payment with the selected provider

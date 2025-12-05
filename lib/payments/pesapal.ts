@@ -195,7 +195,7 @@ export class PesaPalProvider implements IPaymentProvider {
       const ipnId = process.env.PESAPAL_IPN_ID;
 
       // Generate unique order ID
-      const orderId = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      const orderId = `ORDER-${Date.now()}-${Math.random().toString(36).slice(2, 11).toUpperCase()}`;
 
       // Derive customer name from email if not provided
       const customerName = order.customerName || order.email.split('@')[0] || 'Customer';
@@ -305,6 +305,7 @@ export class PesaPalProvider implements IPaymentProvider {
         reference: request.bookingReference,
         currency: request.currency || 'KES',
         customerName: request.customerName,
+        callbackUrl: request.callbackUrl, // Use custom callback URL if provided
       };
 
       // Use the simple method internally

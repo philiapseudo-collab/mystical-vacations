@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import PriceBreakdownWidget from '@/components/PriceBreakdownWidget';
-import PaymentMethodSelector from '@/components/booking/PaymentMethodSelector';
 import { packages } from '@/data/packages';
 import { generateBookingReference } from '@/utils/formatters';
-import type { PaymentProviderName } from '@/lib/payments';
 
-export default function BookPaymentPage() {
+function BookPaymentContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [bookingDetails, setBookingDetails] = useState<any>(null);
   const [pkg, setPkg] = useState<any>(null);
 
@@ -22,22 +21,39 @@ export default function BookPaymentPage() {
   const [phone, setPhone] = useState('');
   const [nationality, setNationality] = useState('');
 
-  // Payment info
-  const [selectedProvider, setSelectedProvider] = useState<PaymentProviderName | null>(null);
-
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
+    // Load from sessionStorage first (full data including specialRequests)
     const stored = sessionStorage.getItem('bookingDetails');
-    if (!stored) {
+    const baseDetails = stored ? JSON.parse(stored) : {};
+
+    // Get URL params (critical fields only)
+    const packageIdFromUrl = searchParams?.get('packageId');
+    const guestsFromUrl = searchParams?.get('guests');
+    const dateFromUrl = searchParams?.get('dateFrom');
+
+    // Merge: sessionStorage base + URL params override
+    const details = {
+      ...baseDetails,
+      packageId: packageIdFromUrl || baseDetails.packageId,
+      guests: guestsFromUrl ? parseInt(guestsFromUrl) : baseDetails.guests,
+      dateFrom: dateFromUrl || baseDetails.dateFrom,
+    };
+
+    // If no booking data at all, redirect to packages
+    if (!details.packageId) {
       router.push('/packages');
       return;
     }
-    const details = JSON.parse(stored);
+
     setBookingDetails(details);
     const foundPkg = packages.find((p) => p.id === details.packageId);
     setPkg(foundPkg);
-  }, [router]);
+
+    // Update sessionStorage with merged data
+    sessionStorage.setItem('bookingDetails', JSON.stringify(details));
+  }, [router, searchParams]);
 
   if (!bookingDetails || !pkg) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -46,16 +62,15 @@ export default function BookPaymentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedProvider) {
-      alert('Please select a payment gateway');
-      return;
-    }
-
     setProcessing(true);
 
     try {
       // Generate booking reference
       const bookingReference = generateBookingReference();
+
+      // Construct callback URL with booking params for payment gateway redirect
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const callbackUrl = `${appUrl}/book/payment/callback?packageId=${encodeURIComponent(bookingDetails.packageId)}&guests=${bookingDetails.guests}&dateFrom=${encodeURIComponent(bookingDetails.dateFrom)}`;
 
       // Prepare payment request
       const paymentRequest = {
@@ -65,7 +80,7 @@ export default function BookPaymentPage() {
         customerPhone: phone,
         customerName: `${firstName} ${lastName}`,
         bookingReference,
-        provider: selectedProvider,
+        callbackUrl, // Include callback URL with booking params
         guestDetails: { firstName, lastName, email, phone, nationality },
       };
 
@@ -86,7 +101,7 @@ export default function BookPaymentPage() {
           ...bookingDetails,
           guestDetails: { firstName, lastName, email, phone, nationality },
           bookingReference,
-          paymentProvider: selectedProvider,
+          paymentProvider: 'pesapal',
           transactionId: data.data.transactionId,
           paymentStatus: data.data.paymentStatus,
         }));
@@ -222,11 +237,22 @@ export default function BookPaymentPage() {
             >
               <h2 className="text-2xl font-serif font-bold text-navy mb-6">Payment Method</h2>
               
-              {/* Payment Gateway Selector */}
-              <PaymentMethodSelector
-                selectedProvider={selectedProvider}
-                onProviderSelect={setSelectedProvider}
-              />
+              {/* PesaPal Payment Info */}
+              <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-5 h-5 rounded-full border-2 border-gold bg-gold flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-white" />
+                  </div>
+                  <h4 className="font-semibold text-navy text-lg">PesaPal</h4>
+                </div>
+                <div className="text-sm text-slate-600 space-y-1 ml-8">
+                  <p>✓ Native M-Pesa Experience</p>
+                  <p>✓ Trusted Local Standard</p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Fees: ~3.5% (Card) / ~2.9-3.5% (M-Pesa)
+                  </p>
+                </div>
+              </div>
 
               <form onSubmit={handleSubmit} className="mt-6">
                 <div className="mt-6 p-4 bg-slate-50 rounded-lg">
@@ -247,7 +273,7 @@ export default function BookPaymentPage() {
                   </Link>
                   <button
                     type="submit"
-                    disabled={processing || !selectedProvider}
+                    disabled={processing}
                     className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {processing ? 'Processing...' : 'Complete Payment →'}
@@ -264,6 +290,21 @@ export default function BookPaymentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BookPaymentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <BookPaymentContent />
+    </Suspense>
   );
 }
 

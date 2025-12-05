@@ -8,6 +8,7 @@ type SearchTab = 'Packages' | 'Accommodation' | 'Transport' | 'Excursions';
 
 interface SearchFormData {
   destination: string;
+  destinationTo?: string; // For Transport tab "To" field
   dateFrom: string;
   dateTo?: string;
   guests: number;
@@ -18,6 +19,7 @@ export default function OmniSearch() {
   const [activeTab, setActiveTab] = useState<SearchTab>('Packages');
   const [formData, setFormData] = useState<SearchFormData>({
     destination: '',
+    destinationTo: '',
     dateFrom: '',
     dateTo: '',
     guests: 2,
@@ -31,6 +33,9 @@ export default function OmniSearch() {
     // Build search query
     const params = new URLSearchParams();
     if (formData.destination) params.set('destination', formData.destination);
+    if (activeTab === 'Transport' && formData.destinationTo) {
+      params.set('destinationTo', formData.destinationTo);
+    }
     if (formData.dateFrom) params.set('from', formData.dateFrom);
     if (formData.dateTo) params.set('to', formData.dateTo);
     params.set('guests', formData.guests.toString());
@@ -127,6 +132,8 @@ export default function OmniSearch() {
                   </label>
                   <select
                     id="destination-to"
+                    value={formData.destinationTo}
+                    onChange={(e) => setFormData({ ...formData, destinationTo: e.target.value })}
                     className="input"
                     required
                   >

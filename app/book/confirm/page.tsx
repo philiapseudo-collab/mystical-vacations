@@ -1,28 +1,88 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { packages } from '@/data/packages';
 import { formatPrice, formatDate } from '@/utils/formatters';
 
-export default function BookConfirmPage() {
+function BookConfirmContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [confirmation, setConfirmation] = useState<any>(null);
   const [pkg, setPkg] = useState<any>(null);
+  const [isMinimal, setIsMinimal] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('bookingConfirmation');
-    if (!stored) {
-      router.push('/packages');
+    const bookingRef = searchParams?.get('ref');
+
+    // Primary: Use sessionStorage (full data)
+    if (stored) {
+      const details = JSON.parse(stored);
+      setConfirmation(details);
+      const foundPkg = packages.find((p) => p.id === details.packageId);
+      setPkg(foundPkg);
+
+      // Clean up URL params but keep ref param
+      if (details.bookingReference) {
+        router.replace(`/book/confirm?ref=${encodeURIComponent(details.bookingReference)}`, { scroll: false });
+      } else {
+        router.replace('/book/confirm', { scroll: false });
+      }
       return;
     }
-    const details = JSON.parse(stored);
-    setConfirmation(details);
-    const foundPkg = packages.find((p) => p.id === details.packageId);
-    setPkg(foundPkg);
-  }, [router]);
+
+    // Fallback: Minimal confirmation with just reference
+    if (bookingRef) {
+      setIsMinimal(true);
+      setConfirmation({ bookingReference: bookingRef });
+      return;
+    }
+
+    // No data at all, redirect to packages
+    router.push('/packages');
+  }, [router, searchParams]);
+
+  // Show minimal confirmation if only ref is available
+  if (isMinimal && confirmation?.bookingReference) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-12">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-lg shadow-xl p-8 text-center"
+          >
+            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-4xl font-serif font-bold text-navy mb-4">
+              Booking <span className="text-gold">Confirmed!</span>
+            </h1>
+            <div className="mb-8 pb-8 border-b-2 border-gold">
+              <p className="text-sm text-slate-600 mb-2">Booking Reference</p>
+              <p className="text-3xl font-bold text-navy font-mono">{confirmation.bookingReference}</p>
+            </div>
+            <div className="bg-gold/10 rounded-lg p-6 mb-6">
+              <p className="text-slate-700 mb-2">
+                Your booking has been confirmed. A confirmation email has been sent to your registered email address.
+              </p>
+              <p className="text-sm text-slate-600">
+                Please check your email for complete booking details and itinerary.
+              </p>
+            </div>
+            <Link href="/">
+              <button className="btn-primary">Return to Home</button>
+            </Link>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   if (!confirmation || !pkg) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -207,6 +267,21 @@ export default function BookConfirmPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function BookConfirmPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <BookConfirmContent />
+    </Suspense>
   );
 }
 

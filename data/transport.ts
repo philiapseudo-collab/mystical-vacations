@@ -7,7 +7,7 @@ import { ITransportRoute, ITransportSegment } from '@/types';
 
 // Helper function to create transport segments
 const createSegment = (data: Partial<ITransportSegment>): ITransportSegment => ({
-  id: data.id || 'seg-' + Math.random().toString(36).substr(2, 9),
+  id: data.id || 'seg-' + Math.random().toString(36).slice(2, 11),
   mode: data.mode || 'Flight',
   operator: data.operator || '',
   departureLocation: data.departureLocation!,

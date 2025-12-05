@@ -1,10 +1,9 @@
 /**
  * Payment Provider Factory
- * Returns the appropriate payment provider based on service name
+ * Returns the PesaPal payment provider
  */
 
 import { PesaPalProvider } from './pesapal';
-import { FlutterwaveProvider } from './flutterwave';
 import type { IPaymentProvider } from './types';
 
 // Re-export types for convenience
@@ -16,23 +15,14 @@ export type {
   IPaymentVerifyResponse,
 } from './types';
 
-export type PaymentProviderName = 'pesapal' | 'flutterwave';
+export type PaymentProviderName = 'pesapal';
 
 /**
- * Get payment provider instance
- * @param serviceName - The name of the payment provider ('pesapal' or 'flutterwave')
+ * Get payment provider instance (always returns PesaPal)
  * @returns IPaymentProvider instance
- * @throws Error if service name is invalid
  */
-export function getPaymentProvider(serviceName: PaymentProviderName): IPaymentProvider {
-  switch (serviceName) {
-    case 'pesapal':
-      return new PesaPalProvider();
-    case 'flutterwave':
-      return new FlutterwaveProvider();
-    default:
-      throw new Error(`Unknown payment provider: ${serviceName}`);
-  }
+export function getPaymentProvider(): IPaymentProvider {
+  return new PesaPalProvider();
 }
 
 /**
@@ -42,7 +32,6 @@ export function getPaymentProvider(serviceName: PaymentProviderName): IPaymentPr
 export function getAllPaymentProviders(): IPaymentProvider[] {
   return [
     new PesaPalProvider(),
-    new FlutterwaveProvider(),
   ];
 }
 
@@ -50,6 +39,6 @@ export function getAllPaymentProviders(): IPaymentProvider[] {
  * Check if a payment provider name is valid
  */
 export function isValidPaymentProvider(name: string): name is PaymentProviderName {
-  return name === 'pesapal' || name === 'flutterwave';
+  return name === 'pesapal';
 }
 

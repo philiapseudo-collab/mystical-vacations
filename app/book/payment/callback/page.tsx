@@ -13,38 +13,32 @@ function CallbackContent() {
   const [transactionId, setTransactionId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get query parameters
-    const orderTrackingId = searchParams.get('OrderTrackingId'); // PesaPal
-    const txRef = searchParams.get('tx_ref'); // Flutterwave
-    const statusParam = searchParams.get('status'); // Flutterwave
-    const provider = searchParams.get('provider') || 'pesapal'; // Default or from query
+    // Get booking params from URL (passed back from payment gateway)
+    const packageId = searchParams.get('packageId');
+    const guests = searchParams.get('guests');
+    const dateFrom = searchParams.get('dateFrom');
+
+    // Reconstruct booking data from URL params if sessionStorage is empty
+    const stored = sessionStorage.getItem('bookingDetails');
+    if (!stored && packageId && guests && dateFrom) {
+      // Reconstruct booking details from URL params
+      const reconstructedDetails = {
+        packageId,
+        guests: parseInt(guests),
+        dateFrom,
+        specialRequests: '', // Not available from URL
+      };
+      sessionStorage.setItem('bookingDetails', JSON.stringify(reconstructedDetails));
+    }
+
+    // Get PesaPal payment gateway query parameters
+    const orderTrackingId = searchParams.get('OrderTrackingId');
 
     // Determine transaction ID
-    const txId = orderTrackingId || txRef;
-    if (txId) {
-      setTransactionId(txId);
-    }
-
-    // Handle Flutterwave status
-    if (statusParam) {
-      if (statusParam === 'successful' || statusParam === 'success') {
-        setStatus('success');
-        setMessage('Payment completed successfully!');
-      } else if (statusParam === 'cancelled') {
-        setStatus('failed');
-        setMessage('Payment was cancelled.');
-      } else {
-        setStatus('failed');
-        setMessage('Payment failed. Please try again.');
-      }
-      return;
-    }
-
-    // For PesaPal, we need to verify the payment
     if (orderTrackingId) {
-      verifyPayment(orderTrackingId, 'pesapal');
-    } else if (txRef) {
-      verifyPayment(txRef, 'flutterwave');
+      setTransactionId(orderTrackingId);
+      // Verify the payment with PesaPal
+      verifyPayment(orderTrackingId);
     } else {
       // No transaction ID found
       setStatus('failed');
@@ -52,7 +46,7 @@ function CallbackContent() {
     }
   }, [searchParams]);
 
-  const verifyPayment = async (txId: string, provider: 'pesapal' | 'flutterwave') => {
+  const verifyPayment = async (txId: string) => {
     try {
       const response = await fetch('/api/payment/verify', {
         method: 'POST',
@@ -61,7 +55,6 @@ function CallbackContent() {
         },
         body: JSON.stringify({
           transactionId: txId,
-          provider,
         }),
       });
 
@@ -74,12 +67,44 @@ function CallbackContent() {
           setStatus('success');
           setMessage('Payment completed successfully!');
           
-          // Update session storage with payment confirmation
+          // Get booking details from sessionStorage or reconstruct from URL
+          const stored = sessionStorage.getItem('bookingDetails');
+          const packageId = searchParams.get('packageId');
+          const guests = searchParams.get('guests');
+          const dateFrom = searchParams.get('dateFrom');
+          
+          let bookingDetails: any = null;
+          if (stored) {
+            bookingDetails = JSON.parse(stored);
+          } else if (packageId && guests && dateFrom) {
+            // Reconstruct from URL params
+            bookingDetails = {
+              packageId,
+              guests: parseInt(guests),
+              dateFrom,
+              specialRequests: '',
+            };
+          }
+
+          // Update or create booking confirmation in sessionStorage
           const bookingConfirmation = sessionStorage.getItem('bookingConfirmation');
-          if (bookingConfirmation) {
+          if (bookingConfirmation && bookingDetails) {
             const confirmation = JSON.parse(bookingConfirmation);
             confirmation.paymentStatus = 'completed';
             confirmation.transactionId = txId;
+            // Ensure booking details are included
+            confirmation.packageId = bookingDetails.packageId;
+            confirmation.guests = bookingDetails.guests;
+            confirmation.dateFrom = bookingDetails.dateFrom;
+            sessionStorage.setItem('bookingConfirmation', JSON.stringify(confirmation));
+          } else if (bookingDetails) {
+            // Create new confirmation if it doesn't exist
+            const confirmation = {
+              ...bookingDetails,
+              paymentStatus: 'completed',
+              transactionId: txId,
+              paymentProvider: 'pesapal',
+            };
             sessionStorage.setItem('bookingConfirmation', JSON.stringify(confirmation));
           }
 
@@ -93,7 +118,7 @@ function CallbackContent() {
           
           // Retry verification after 3 seconds
           setTimeout(() => {
-            verifyPayment(txId, provider);
+            verifyPayment(txId);
           }, 3000);
         } else {
           setStatus('failed');

@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "binary"
 }
 
@@ -11,18 +8,48 @@ datasource db {
 }
 
 model Order {
-  id                    String   @id @default(uuid())
-  amount                Float
-  currency              String   @default("KES")
-  status                String   @default("PENDING") // PENDING, COMPLETED, FAILED, CANCELLED
-  pesapalOrderTrackingId String @unique
-  customerEmail         String
-  customerPhone         String
-  description           String
-  reference             String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                     String   @id
+  amount                 Float
+  currency               String   @default("KES")
+  status                 String   @default("PENDING")
+  pesapalOrderTrackingId String?  @unique
+  customerEmail          String
+  customerPhone          String?
+  description            String?
+  reference              String
+  createdAt              DateTime @default(now())
+}
 
-  @@index([status])
-  @@map("orders")
+model Booking {
+  id               String   @id @default(uuid())
+  bookingReference String   @unique
+  items            Json     // Store IBookingItem[] as JSON
+  guestDetails     Json     // Store guest details as JSON
+  priceBreakdown   Json     // Store IPriceBreakdown as JSON
+  status           String   @default("pending")
+  paymentStatus    String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([bookingReference])
+  @@map("bookings")
+}
+
+model SGRTicket {
+  id               String   @id @default(uuid())
+  ticketNumber     String   @unique
+  route            String
+  trainNumber      String
+  class            String
+  seatNumber       String
+  departureTime    String   // ISO 8601 format: "2025-01-15T08:00:00.000Z"
+  arrivalTime      String   // ISO 8601 format: "2025-01-15T13:30:00.000Z"
+  passengerName    String
+  qrCode           String
+  bookingReference String
+  createdAt        DateTime @default(now())
+
+  @@index([ticketNumber])
+  @@index([bookingReference])
+  @@map("sgr_tickets")
 }

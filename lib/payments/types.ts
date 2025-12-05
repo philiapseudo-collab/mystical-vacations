@@ -10,6 +10,7 @@ export interface IPaymentInitiateRequest {
   customerPhone: string;
   customerName: string;
   bookingReference: string;
+  callbackUrl?: string; // Optional custom callback URL with booking params
   metadata?: Record<string, any>;
 }
 
@@ -19,12 +20,12 @@ export interface IPaymentInitiateResponse {
   paymentUrl?: string; // For redirect-based flows
   paymentStatus: 'pending' | 'initiated' | 'failed';
   message: string;
-  provider: 'pesapal' | 'flutterwave';
+  provider: 'pesapal';
 }
 
 export interface IPaymentVerifyRequest {
   transactionId: string;
-  provider: 'pesapal' | 'flutterwave';
+  provider: 'pesapal';
 }
 
 export interface IPaymentVerifyResponse {
@@ -44,7 +45,7 @@ export interface IPaymentProvider {
   /**
    * Provider name
    */
-  readonly name: 'pesapal' | 'flutterwave';
+  readonly name: 'pesapal';
 
   /**
    * Display name for UI

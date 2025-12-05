@@ -14,9 +14,7 @@
 
 import { NextResponse } from 'next/server';
 import type { IAPIResponse, ISGRBookingRequest, ISGRBookingResponse, ISGRTicket } from '@/types';
-
-// Mock ticket store (would be database in production)
-const sgrTickets: ISGRTicket[] = [];
+import { prisma } from '@/lib/prisma';
 
 /**
  * Generate mock QR code (base64 encoded placeholder)
@@ -42,7 +40,7 @@ async function processMPesaPaymentToSGR(
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Mock M-Pesa B2B payment
-  const mpesaTransactionId = `MPESA-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const mpesaTransactionId = `MPESA-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
   console.log(`[SGR-MPESA] Processing B2B payment: ${amount} KES`);
   console.log(`[SGR-MPESA] Payment token: ${paymentToken}`);
@@ -147,9 +145,9 @@ export async function POST(request: Request) {
       return NextResponse.json(response, { status: 402 });
     }
 
-    // Step 2: Generate tickets
+    // Step 2: Generate tickets and save to database
     const tickets: ISGRTicket[] = [];
-    const bookingReference = `SGR-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    const bookingReference = `SGR-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     for (let i = 0; i < bookingRequest.passengers; i++) {
       const ticket = generateSGRTicket(
@@ -161,7 +159,22 @@ export async function POST(request: Request) {
         bookingReference
       );
       tickets.push(ticket);
-      sgrTickets.push(ticket);
+
+      // Save ticket to database
+      await prisma.sGRTicket.create({
+        data: {
+          ticketNumber: ticket.ticketNumber,
+          route: ticket.route,
+          trainNumber: ticket.trainNumber,
+          class: ticket.class,
+          seatNumber: ticket.seatNumber,
+          departureTime: ticket.departureTime,
+          arrivalTime: ticket.arrivalTime,
+          passengerName: ticket.passengerName,
+          qrCode: ticket.qrCode,
+          bookingReference: ticket.bookingReference,
+        },
+      });
     }
 
     console.log(`[SGR] Successfully generated ${tickets.length} tickets`);

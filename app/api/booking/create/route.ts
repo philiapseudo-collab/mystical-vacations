@@ -1,36 +1,58 @@
 import { NextResponse } from 'next/server';
-import type { IAPIResponse, IBooking } from '@/types';
-
-// In-memory store for demo (would be database in production)
-const bookings: IBooking[] = [];
+import type { IAPIResponse, IBooking, IBookingItem, IPriceBreakdown } from '@/types';
+import { prisma } from '@/lib/prisma';
 
 /**
  * POST /api/booking/create
  * Create a new booking
  */
 export async function POST(request: Request) {
-  const bookingData = await request.json();
+  try {
+    const bookingData = await request.json();
 
-  const booking: IBooking = {
-    id: `booking-${Date.now()}`,
-    bookingReference: bookingData.bookingReference,
-    items: bookingData.items,
-    guestDetails: bookingData.guestDetails,
-    priceBreakdown: bookingData.priceBreakdown,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    paymentStatus: 'pending',
-  };
+    // Create booking in database
+    const bookingRecord = await prisma.booking.create({
+      data: {
+        bookingReference: bookingData.bookingReference,
+        items: bookingData.items as IBookingItem[],
+        guestDetails: bookingData.guestDetails,
+        priceBreakdown: bookingData.priceBreakdown as IPriceBreakdown,
+        status: 'pending',
+        paymentStatus: 'pending',
+      },
+    });
 
-  bookings.push(booking);
+    // Convert Prisma record to IBooking format
+    const booking: IBooking = {
+      id: bookingRecord.id,
+      bookingReference: bookingRecord.bookingReference,
+      items: bookingRecord.items as IBookingItem[],
+      guestDetails: bookingRecord.guestDetails as IBooking['guestDetails'],
+      priceBreakdown: bookingRecord.priceBreakdown as IPriceBreakdown,
+      status: bookingRecord.status as IBooking['status'],
+      createdAt: bookingRecord.createdAt.toISOString(),
+      updatedAt: bookingRecord.updatedAt.toISOString(),
+      paymentStatus: bookingRecord.paymentStatus as IBooking['paymentStatus'],
+    };
 
-  const response: IAPIResponse<IBooking> = {
-    success: true,
-    data: booking,
-    timestamp: new Date().toISOString(),
-  };
+    const response: IAPIResponse<IBooking> = {
+      success: true,
+      data: booking,
+      timestamp: new Date().toISOString(),
+    };
 
-  return NextResponse.json(response, { status: 201 });
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Booking creation error:', error);
+    const response: IAPIResponse<never> = {
+      success: false,
+      error: {
+        code: 'BOOKING_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to create booking',
+      },
+      timestamp: new Date().toISOString(),
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
 }
 

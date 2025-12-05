@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { IAPIResponse } from '@/types';
-import { getPaymentProvider, isValidPaymentProvider } from '@/lib/payments';
+import { getPaymentProvider } from '@/lib/payments';
 import type { IPaymentInitiateRequest, IPaymentInitiateResponse } from '@/lib/payments';
 
 /**
  * POST /api/payment/process
- * Process payment using selected payment provider (PesaPal or Flutterwave)
+ * Process payment using PesaPal
  * 
  * Request body:
  * {
@@ -15,7 +15,6 @@ import type { IPaymentInitiateRequest, IPaymentInitiateResponse } from '@/lib/pa
  *   customerPhone: string;
  *   customerName: string;
  *   bookingReference: string;
- *   provider: 'pesapal' | 'flutterwave';
  *   metadata?: Record<string, any>;
  * }
  */
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
       customerPhone,
       customerName,
       bookingReference,
-      provider,
+      callbackUrl,
       metadata,
     } = body;
 
@@ -40,18 +39,6 @@ export async function POST(request: Request) {
         error: {
           code: 'INVALID_AMOUNT',
           message: 'Invalid payment amount',
-        },
-        timestamp: new Date().toISOString(),
-      };
-      return NextResponse.json(response, { status: 400 });
-    }
-
-    if (!provider || !isValidPaymentProvider(provider)) {
-      const response: IAPIResponse<never> = {
-        success: false,
-        error: {
-          code: 'INVALID_PROVIDER',
-          message: 'Invalid payment provider. Must be "pesapal" or "flutterwave"',
         },
         timestamp: new Date().toISOString(),
       };
@@ -70,8 +57,8 @@ export async function POST(request: Request) {
       return NextResponse.json(response, { status: 400 });
     }
 
-    // Get the payment provider instance
-    const paymentProvider = getPaymentProvider(provider);
+    // Get the payment provider instance (always PesaPal)
+    const paymentProvider = getPaymentProvider();
 
     // Prepare payment initiation request
     const paymentRequest: IPaymentInitiateRequest = {
@@ -81,6 +68,7 @@ export async function POST(request: Request) {
       customerPhone,
       customerName,
       bookingReference,
+      callbackUrl, // Pass custom callback URL with booking params
       metadata,
     };
 

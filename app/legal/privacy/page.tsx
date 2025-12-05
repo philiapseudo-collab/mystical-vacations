@@ -46,8 +46,8 @@ export default function PrivacyPage() {
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2.3 Payment Information</h3>
         <p>
-          We do not store your full payment card details. Payment processing is handled securely by our payment providers 
-          (PesaPal and Flutterwave). We only receive confirmation of successful payments.
+          We do not store your full payment card details. Payment processing is handled securely by our payment provider 
+          (PesaPal). We only receive confirmation of successful payments.
         </p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2.4 Technical Information</h3>
