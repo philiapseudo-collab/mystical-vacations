@@ -1,18 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import type { IExcursion } from '@/types';
 import { formatPrice } from '@/utils/formatters';
-import { EXCURSION_CATEGORIES } from '@/utils/constants';
+import { useExcursionFilters } from '@/hooks/useExcursionFilters';
+import { filterExcursions, calculatePriceRange } from '@/utils/excursion-filters';
+import ExcursionFilterSidebar from '@/components/ExcursionFilterSidebar';
+import ExcursionFilterDrawer from '@/components/ExcursionFilterDrawer';
+import ExcursionFilterTrigger from '@/components/ExcursionFilterTrigger';
 
-export default function ExcursionsPage() {
+function ExcursionsContent() {
+  const searchParams = useSearchParams();
   const [excursions, setExcursions] = useState<IExcursion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'rating' | 'duration'>('rating');
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
+  // Fetch excursions
   useEffect(() => {
     async function fetchExcursions() {
       try {
@@ -30,27 +37,61 @@ export default function ExcursionsPage() {
     fetchExcursions();
   }, []);
 
-  // Filter and sort
-  let filtered = [...excursions];
-
-  if (filterCategory !== 'all') {
-    filtered = filtered.filter((exc) => exc.category === filterCategory);
-  }
-
-  filtered.sort((a, b) => {
-    switch (sortBy) {
-      case 'price_asc':
-        return a.price - b.price;
-      case 'price_desc':
-        return b.price - a.price;
-      case 'rating':
-        return b.rating - a.rating;
-      case 'duration':
-        return a.duration - b.duration;
-      default:
-        return 0;
+  // Calculate default price range from data (use fallback if no data yet)
+  const defaultPriceRange = useMemo(() => {
+    if (excursions.length === 0) {
+      return { min: 0, max: 1000 };
     }
-  });
+    return calculatePriceRange(excursions);
+  }, [excursions]);
+
+  // Initialize filters with URL params
+  const { filters, updateFilters, resetFilters, activeFilterCount } = useExcursionFilters(
+    defaultPriceRange
+  );
+
+  // Update price range when data loads (if not set in URL)
+  useEffect(() => {
+    if (excursions.length > 0 && defaultPriceRange.min > 0 && defaultPriceRange.max < Infinity) {
+      const urlPriceMin = searchParams?.get('price_min');
+      const urlPriceMax = searchParams?.get('price_max');
+      
+      // Only update if URL doesn't specify price range
+      if (!urlPriceMin && !urlPriceMax) {
+        updateFilters({
+          priceRange: {
+            min: Math.max(filters.priceRange.min, defaultPriceRange.min),
+            max: Math.min(filters.priceRange.max, defaultPriceRange.max),
+          },
+        });
+      }
+    }
+  }, [excursions.length, defaultPriceRange, searchParams, filters.priceRange, updateFilters]);
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    return filterExcursions(excursions, filters);
+  }, [excursions, filters]);
+
+  // Sort filtered results
+  const sorted = useMemo(() => {
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'price_asc':
+          return a.price - b.price;
+        case 'price_desc':
+          return b.price - a.price;
+        case 'rating':
+          return b.rating - a.rating;
+        case 'duration':
+          return a.duration - b.duration;
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [filtered, sortBy]);
 
   if (loading) {
     return (
@@ -83,36 +124,13 @@ export default function ExcursionsPage() {
         </div>
       </section>
 
-      {/* Filters */}
+      {/* Sort Bar (Top) */}
       <section className="bg-white border-b border-slate-200 sticky top-[72px] z-40 shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setFilterCategory('all')}
-                className={`px-4 py-2 rounded-md font-semibold transition-all ${
-                  filterCategory === 'all'
-                    ? 'bg-gold text-navy'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                All
-              </button>
-              {EXCURSION_CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setFilterCategory(category)}
-                  className={`px-4 py-2 rounded-md font-semibold transition-all ${
-                    filterCategory === category
-                      ? 'bg-gold text-navy'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-
+          <div className="flex items-center justify-between">
+            <p className="text-slate-600">
+              Showing <span className="font-semibold text-navy">{sorted.length}</span> experiences
+            </p>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
@@ -127,96 +145,154 @@ export default function ExcursionsPage() {
         </div>
       </section>
 
-      {/* Results */}
+      {/* Main Content: Sidebar + Grid */}
       <section className="py-12">
         <div className="container mx-auto px-4">
-          <div className="mb-6">
-            <p className="text-slate-600">
-              Showing <span className="font-semibold text-navy">{filtered.length}</span> experiences
-            </p>
-          </div>
+          <div className="flex gap-8">
+            {/* Desktop Sidebar - Hidden on mobile */}
+            <aside className="hidden xl:block flex-shrink-0">
+              <div className="sticky top-24">
+                <ExcursionFilterSidebar
+                  excursions={excursions}
+                  filters={filters}
+                  onFiltersChange={updateFilters}
+                  onReset={resetFilters}
+                />
+              </div>
+            </aside>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((exc, index) => (
-              <motion.div
-                key={exc.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                id={exc.slug}
-                className="card group cursor-pointer h-full flex flex-col"
-              >
-                <div className="relative h-64 overflow-hidden">
-                  <Image
-                    src={exc.images[0].url}
-                    alt={exc.images[0].alt}
-                    fill
-                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                  {exc.featured && (
-                    <div className="absolute top-3 right-3 bg-gold text-navy px-2 py-1 rounded text-xs font-semibold">
-                      Featured
-                    </div>
-                  )}
-                  <div className="absolute top-3 left-3 bg-navy text-gold px-3 py-1 rounded-full text-xs font-semibold">
-                    {exc.category}
-                  </div>
+            {/* Results Grid */}
+            <div className="flex-1 min-w-0">
+              {sorted.length === 0 ? (
+                <div className="text-center py-16">
+                  <p className="text-xl text-slate-600 mb-2">No excursions found</p>
+                  <p className="text-slate-500 mb-6">Try adjusting your filters</p>
+                  <button onClick={resetFilters} className="btn-outline">
+                    Clear All Filters
+                  </button>
                 </div>
-
-                <div className="p-6 flex-1 flex flex-col">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-navy mb-2 group-hover:text-gold transition-colors">
-                      {exc.title}
-                    </h3>
-                    <p className="text-sm text-slate-600 mb-3">
-                      {exc.location.city}, {exc.location.country}
-                    </p>
-                    <p className="text-sm text-slate-700 mb-4 line-clamp-3">
-                      {exc.description}
-                    </p>
-
-                    {/* Highlights */}
-                    <div className="mb-4">
-                      <p className="text-xs font-semibold text-navy mb-1">Highlights:</p>
-                      <ul className="text-xs text-slate-600 space-y-1">
-                        {exc.highlights.slice(0, 3).map((highlight, i) => (
-                          <li key={i} className="flex items-start gap-1">
-                            <span className="text-gold mt-0.5">✓</span>
-                            <span>{highlight}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <span className="text-2xl font-bold text-gold">{formatPrice(exc.price)}</span>
-                          <span className="text-sm text-slate-600"> per person</span>
+              ) : (
+                <div className="columns-1 md:columns-2 lg:columns-3 gap-6">
+                  {sorted.map((exc, index) => (
+                    <motion.div
+                      key={exc.id}
+                      initial={{ opacity: 0, y: 30 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      id={exc.slug}
+                      className="card group cursor-pointer w-full break-inside-avoid mb-6 flex flex-col"
+                    >
+                      <div className="relative w-full overflow-hidden rounded-t-lg">
+                        <Image
+                          src={exc.images[0].url}
+                          alt={exc.images[0].alt}
+                          width={800}
+                          height={1200}
+                          unoptimized
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          className="w-full h-auto max-h-[600px] object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        {exc.featured && (
+                          <div className="absolute top-3 right-3 bg-gold text-navy px-2 py-1 rounded text-xs font-semibold">
+                            Featured
+                          </div>
+                        )}
+                        <div className="absolute top-3 left-3 bg-navy text-gold px-3 py-1 rounded-full text-xs font-semibold">
+                          {exc.category}
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-slate-600">
-                      <span>⏱️ {exc.duration}h</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-gold">★</span>
-                        <span className="font-semibold">{exc.rating}</span>
-                        <span className="text-slate-500">({exc.reviewCount})</span>
+
+                      <div className="p-6 flex flex-col">
+                        <div>
+                          <h3 className="text-lg font-bold text-navy mb-2 group-hover:text-gold transition-colors">
+                            {exc.title}
+                          </h3>
+                          <p className="text-sm text-slate-600 mb-3">
+                            {exc.location.city}, {exc.location.country}
+                          </p>
+                          <p className="text-sm text-slate-700 mb-4 line-clamp-3">
+                            {exc.description}
+                          </p>
+
+                          {/* Highlights */}
+                          <div className="mb-4">
+                            <p className="text-xs font-semibold text-navy mb-1">Highlights:</p>
+                            <ul className="text-xs text-slate-600 space-y-1">
+                              {exc.highlights.slice(0, 3).map((highlight, i) => (
+                                <li key={i} className="flex items-start gap-1">
+                                  <span className="text-gold mt-0.5">✓</span>
+                                  <span>{highlight}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-200">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <span className="text-2xl font-bold text-gold">
+                                  {formatPrice(exc.price)}
+                                </span>
+                                <span className="text-sm text-slate-600"> per person</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-sm text-slate-600">
+                            <span>⏱️ {exc.duration}h</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-gold">★</span>
+                              <span className="font-semibold">{exc.rating}</span>
+                              <span className="text-slate-500">({exc.reviewCount})</span>
+                            </div>
+                          </div>
+                          <button className="btn-primary w-full mt-4">Book Experience</button>
+                        </div>
                       </div>
-                    </div>
-                    <button className="btn-primary w-full mt-4">
-                      Book Experience
-                    </button>
-                  </div>
+                    </motion.div>
+                  ))}
                 </div>
-              </motion.div>
-            ))}
+              )}
+            </div>
           </div>
         </div>
       </section>
+
+      {/* Mobile Filter Drawer */}
+      <ExcursionFilterDrawer
+        isOpen={isMobileDrawerOpen}
+        onClose={() => setIsMobileDrawerOpen(false)}
+        excursions={excursions}
+        filters={filters}
+        onFiltersChange={updateFilters}
+        onReset={resetFilters}
+      />
+
+      {/* Mobile Filter Trigger */}
+      <div className="xl:hidden">
+        <ExcursionFilterTrigger
+          onClick={() => setIsMobileDrawerOpen(true)}
+          activeFilterCount={activeFilterCount}
+        />
+      </div>
     </div>
   );
 }
 
+export default function ExcursionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <ExcursionsContent />
+    </Suspense>
+  );
+}

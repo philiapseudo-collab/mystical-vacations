@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import Image from 'next/image';
+import OurStorySection from '@/components/about/OurStorySection';
 
 export default function AboutPage() {
   return (
@@ -25,37 +26,7 @@ export default function AboutPage() {
       </section>
 
       {/* Story */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white rounded-lg shadow-md p-8 md:p-12"
-            >
-              <h2 className="text-3xl font-serif font-bold text-navy mb-6">Our Story</h2>
-              <div className="prose prose-lg max-w-none text-slate-700 space-y-4">
-                <p>
-                  Founded in 2010, Mystical Vacations was born from a passion for showcasing the extraordinary beauty 
-                  and cultural richness of Kenya and Tanzania. Our founders, seasoned travelers and conservationists, 
-                  recognized the need for luxury travel experiences that honor both the land and its people.
-                </p>
-                <p>
-                  Today, we are East Africa&apos;s premier luxury travel company, specializing in bespoke safaris, 
-                  cultural immersions, and coastal escapes. Our deep local knowledge, commitment to sustainability, 
-                  and partnerships with the finest lodges and camps ensure unforgettable experiences.
-                </p>
-                <p>
-                  Every journey we craft tells a story—of ancient migrations, vibrant cultures, and pristine 
-                  wilderness. We believe that luxury travel should not only provide comfort and exclusivity but 
-                  also create meaningful connections with the destinations we explore.
-                </p>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
+      <OurStorySection />
 
       {/* Values */}
       <section className="py-20 bg-navy text-white">

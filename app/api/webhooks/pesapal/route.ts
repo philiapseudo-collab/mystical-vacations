@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PesaPalProvider } from '@/lib/payments/pesapal';
-import { prisma } from '@/lib/prisma';
+import { getPrismaClient } from '@/lib/prisma-safe';
 
 /**
  * PesaPal Webhook Handler (IPN Receiver)
@@ -81,6 +81,50 @@ export async function POST(request: Request) {
     // Handle different payment statuses and update database
     const paymentStatus = verificationResult.paymentStatus.toUpperCase();
     
+    // Helper function to create or update order
+    const prisma = getPrismaClient();
+    const createOrUpdateOrder = async (status: string) => {
+      if (!prisma) {
+        console.warn('⚠️ Prisma not available - skipping database update');
+        return;
+      }
+      
+      try {
+        // Try to find existing order first
+        const existingOrder = await prisma.order.findUnique({
+          where: { pesapalOrderTrackingId: orderTrackingId },
+        });
+
+        if (existingOrder) {
+          // Update existing order
+          await prisma.order.update({
+            where: { pesapalOrderTrackingId: orderTrackingId },
+            data: { status },
+          });
+          console.log(`✅ Database updated: Order status changed to ${status}`);
+        } else {
+          // Create new order if it doesn't exist (e.g., DB was down during payment initiation)
+          await prisma.order.create({
+            data: {
+              id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+              amount: verificationResult.amount,
+              currency: verificationResult.currency || 'KES',
+              status,
+              pesapalOrderTrackingId: orderTrackingId,
+              customerEmail: '', // Not available from webhook
+              customerPhone: '', // Not available from webhook
+              description: verificationResult.message || `Payment ${status.toLowerCase()}`,
+              reference: orderTrackingId,
+            },
+          });
+          console.log(`✅ Database created: New order with status ${status}`);
+        }
+      } catch (dbError) {
+        console.error(`❌ Database operation failed for status ${status}:`, dbError);
+        // Don't throw - we still want to return 200 to PesaPal
+      }
+    };
+    
     if (verificationResult.paymentStatus === 'completed') {
       // Payment is confirmed as completed
       console.log('💰 PAYMENT SUCCESS:', {
@@ -90,70 +134,28 @@ export async function POST(request: Request) {
         timestamp: new Date().toISOString(),
       });
 
-      // Update database with payment confirmation
-      try {
-        await prisma.order.update({
-          where: { pesapalOrderTrackingId: orderTrackingId },
-          data: {
-            status: 'COMPLETED',
-          },
-        });
-        console.log('✅ Database updated: Order marked as COMPLETED');
-      } catch (dbError) {
-        console.error('❌ Database update failed:', dbError);
-        // Don't throw - we still want to return 200 to PesaPal
-      }
+      await createOrUpdateOrder('COMPLETED');
     } else if (verificationResult.paymentStatus === 'pending') {
       console.log('⏳ Payment Status: PENDING', {
         orderTrackingId,
         message: verificationResult.message,
       });
       
-      // Update status to PENDING (in case it was created but status changed)
-      try {
-        await prisma.order.updateMany({
-          where: { pesapalOrderTrackingId: orderTrackingId },
-          data: {
-            status: 'PENDING',
-          },
-        });
-      } catch (dbError) {
-        console.error('❌ Database update failed:', dbError);
-      }
+      await createOrUpdateOrder('PENDING');
     } else if (verificationResult.paymentStatus === 'failed') {
       console.log('❌ Payment Status: FAILED', {
         orderTrackingId,
         message: verificationResult.message,
       });
       
-      // Update status to FAILED
-      try {
-        await prisma.order.updateMany({
-          where: { pesapalOrderTrackingId: orderTrackingId },
-          data: {
-            status: 'FAILED',
-          },
-        });
-      } catch (dbError) {
-        console.error('❌ Database update failed:', dbError);
-      }
+      await createOrUpdateOrder('FAILED');
     } else if (verificationResult.paymentStatus === 'cancelled') {
       console.log('🚫 Payment Status: CANCELLED', {
         orderTrackingId,
         message: verificationResult.message,
       });
       
-      // Update status to CANCELLED
-      try {
-        await prisma.order.updateMany({
-          where: { pesapalOrderTrackingId: orderTrackingId },
-          data: {
-            status: 'CANCELLED',
-          },
-        });
-      } catch (dbError) {
-        console.error('❌ Database update failed:', dbError);
-      }
+      await createOrUpdateOrder('CANCELLED');
     }
 
     // Return 200 OK to acknowledge receipt

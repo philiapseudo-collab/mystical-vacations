@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { ITransportRoute } from '@/types';
 import { formatDuration, formatPrice, formatTime } from '@/utils/formatters';
+import { groupTransportRoutes } from '@/utils/transport-helpers';
+import TransportComparisonView from '@/components/TransportComparisonView';
 
 export default function TransportPage() {
+  const router = useRouter();
   const [transportRoutes, setTransportRoutes] = useState<ITransportRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<string>('all');
@@ -28,13 +32,20 @@ export default function TransportPage() {
   }, []);
 
   // Filter routes
-  let filtered = [...transportRoutes];
+  const filtered = useMemo(() => {
+    let routes = [...transportRoutes];
+    if (filterMode !== 'all') {
+      routes = routes.filter((route) =>
+        route.segments.some((seg) => seg.mode === filterMode)
+      );
+    }
+    return routes;
+  }, [transportRoutes, filterMode]);
 
-  if (filterMode !== 'all') {
-    filtered = filtered.filter((route) =>
-      route.segments.some((seg) => seg.mode === filterMode)
-    );
-  }
+  // Group routes for comparison
+  const { comparableGroups, standaloneRoutes } = useMemo(() => {
+    return groupTransportRoutes(filtered);
+  }, [filtered]);
 
   if (loading) {
     return (
@@ -94,90 +105,131 @@ export default function TransportPage() {
           <div className="mb-6">
             <p className="text-slate-600">
               Showing <span className="font-semibold text-navy">{filtered.length}</span> routes
+              {comparableGroups.length > 0 && (
+                <span className="ml-2">
+                  ({comparableGroups.length} comparison{comparableGroups.length > 1 ? 's' : ''})
+                </span>
+              )}
             </p>
           </div>
 
-          <div className="space-y-4">
-            {filtered.map((route, index) => (
-              <motion.div
-                key={route.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="card p-6 hover:shadow-xl transition-shadow"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                  {/* Route Info */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-3">
-                      <h3 className="text-xl font-bold text-navy">{route.name}</h3>
-                      {route.isMultiModal && (
-                        <span className="text-xs bg-gold/10 text-gold px-2 py-1 rounded font-semibold">
-                          Multi-modal
-                        </span>
-                      )}
-                    </div>
+          {/* Comparison Views */}
+          {comparableGroups.length > 0 && (
+            <div className="space-y-8 mb-12">
+              {comparableGroups.map((group) => (
+                <TransportComparisonView
+                  key={group.key}
+                  flight={group.flight!}
+                  sgrEconomy={group.sgrEconomy}
+                  sgrFirstClass={group.sgrFirstClass}
+                  origin={group.origin}
+                  destination={group.destination}
+                />
+              ))}
+            </div>
+          )}
 
-                    {/* Segments */}
-                    <div className="space-y-3">
-                      {route.segments.map((segment, i) => (
-                        <div key={segment.id} className="flex items-center gap-4">
-                          {/* Mode Badge */}
-                          <div className="flex-shrink-0">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                              segment.mode === 'Flight' || segment.mode === 'Charter'
-                                ? 'bg-blue-100 text-blue-700'
-                                : segment.mode === 'SGR'
-                                ? 'bg-green-100 text-green-700'
-                                : segment.mode === 'Ferry'
-                                ? 'bg-cyan-100 text-cyan-700'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}>
-                              {segment.mode} {segment.class !== 'Economy' && `(${segment.class})`}
+          {/* Standalone Routes (List View) */}
+          {standaloneRoutes.length > 0 && (
+            <div>
+              {comparableGroups.length > 0 && (
+                <h2 className="text-2xl font-serif font-bold text-navy mb-6">
+                  Other Transport Options
+                </h2>
+              )}
+              <div className="space-y-4">
+                {standaloneRoutes.map((route, index) => (
+                  <motion.div
+                    key={route.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="card p-6 hover:shadow-xl transition-shadow"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                      {/* Route Info */}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-4 mb-3">
+                          <h3 className="text-xl font-bold text-navy">{route.name}</h3>
+                          {route.isMultiModal && (
+                            <span className="text-xs bg-gold/10 text-gold px-2 py-1 rounded font-semibold">
+                              Multi-modal
                             </span>
-                          </div>
-
-                          {/* Route Details */}
-                          <div className="flex-1 flex items-center gap-2 text-sm">
-                            <span className="font-semibold">{segment.departureLocation.city}</span>
-                            <span className="text-slate-400">→</span>
-                            <span className="font-semibold">{segment.arrivalLocation.city}</span>
-                            <span className="text-slate-500 mx-2">•</span>
-                            <span className="text-slate-600">
-                              {formatTime(segment.departureTime)} - {formatTime(segment.arrivalTime)}
-                            </span>
-                            <span className="text-slate-500 mx-2">•</span>
-                            <span className="text-slate-600">{formatDuration(segment.duration)}</span>
-                          </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
 
-                    {/* Amenities */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {route.segments[0].amenities.slice(0, 3).map((amenity, i) => (
-                        <span key={i} className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                          {amenity}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                        {/* Segments */}
+                        <div className="space-y-3">
+                          {route.segments.map((segment, i) => (
+                            <div key={segment.id} className="flex items-center gap-4">
+                              {/* Mode Badge */}
+                              <div className="flex-shrink-0">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                  segment.mode === 'Flight' || segment.mode === 'Charter'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : segment.mode === 'SGR'
+                                    ? 'bg-green-100 text-green-700'
+                                    : segment.mode === 'Ferry'
+                                    ? 'bg-cyan-100 text-cyan-700'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {segment.mode} {segment.class !== 'Economy' && `(${segment.class})`}
+                                </span>
+                              </div>
 
-                  {/* Price & Action */}
-                  <div className="flex lg:flex-col items-center lg:items-end gap-4">
-                    <div className="text-right">
-                      <p className="text-sm text-slate-500">Total</p>
-                      <p className="text-3xl font-bold text-gold">{formatPrice(route.totalPrice)}</p>
-                      <p className="text-xs text-slate-500">{formatDuration(route.totalDuration)}</p>
+                              {/* Route Details */}
+                              <div className="flex-1 flex items-center gap-2 text-sm">
+                                <span className="font-semibold">{segment.departureLocation.city}</span>
+                                <span className="text-slate-400">→</span>
+                                <span className="font-semibold">{segment.arrivalLocation.city}</span>
+                                <span className="text-slate-500 mx-2">•</span>
+                                <span className="text-slate-600">
+                                  {formatTime(segment.departureTime)} - {formatTime(segment.arrivalTime)}
+                                </span>
+                                <span className="text-slate-500 mx-2">•</span>
+                                <span className="text-slate-600">{formatDuration(segment.duration)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Amenities */}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {route.segments[0].amenities.slice(0, 3).map((amenity, i) => (
+                            <span key={i} className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                              {amenity}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Price & Action */}
+                      <div className="flex lg:flex-col items-center lg:items-end gap-4">
+                        <div className="text-right">
+                          <p className="text-sm text-slate-500">Total</p>
+                          <p className="text-3xl font-bold text-gold">{formatPrice(route.totalPrice)}</p>
+                          <p className="text-xs text-slate-500">{formatDuration(route.totalDuration)}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            sessionStorage.setItem('bookingDetails', JSON.stringify({
+                              type: 'transport',
+                              routeId: route.id,
+                              selectedClass: route.segments[0].class,
+                            }));
+                            router.push('/book/review');
+                          }}
+                          className="btn-primary whitespace-nowrap"
+                        >
+                          Select Route
+                        </button>
+                      </div>
                     </div>
-                    <button className="btn-primary whitespace-nowrap">
-                      Select Route
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

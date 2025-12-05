@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { IAPIResponse } from '@/types';
 import { getPaymentProvider } from '@/lib/payments';
 import type { IPaymentVerifyRequest, IPaymentVerifyResponse } from '@/lib/payments';
-import { prisma } from '@/lib/prisma';
+import { getPrismaClient } from '@/lib/prisma-safe';
 
 /**
  * POST /api/payment/verify
@@ -30,29 +30,39 @@ export async function POST(request: Request) {
     }
 
     // Hybrid Approach: Check database first, then API if needed
-    // Step 1: Query database first (fast path)
-    const dbOrder = await prisma.order.findUnique({
-      where: { pesapalOrderTrackingId: transactionId },
-    });
+    // Step 1: Query database first (fast path) - gracefully handle DB errors
+    const prisma = getPrismaClient();
+    let dbOrder = null;
+    if (prisma) {
+      try {
+        dbOrder = await prisma.order.findUnique({
+          where: { pesapalOrderTrackingId: transactionId },
+        });
 
-    // Step 2: If DB says COMPLETED or FAILED, return immediately (fast)
-    if (dbOrder && (dbOrder.status === 'COMPLETED' || dbOrder.status === 'FAILED')) {
-      const paymentResponse = {
-        success: dbOrder.status === 'COMPLETED',
-        transactionId: dbOrder.pesapalOrderTrackingId,
-        paymentStatus: dbOrder.status.toLowerCase() as 'completed' | 'failed',
-        amount: dbOrder.amount,
-        currency: dbOrder.currency,
-        message: `Payment status: ${dbOrder.status}`,
-      };
+        // Step 2: If DB says COMPLETED or FAILED, return immediately (fast)
+        if (dbOrder && (dbOrder.status === 'COMPLETED' || dbOrder.status === 'FAILED')) {
+          const paymentResponse = {
+            success: dbOrder.status === 'COMPLETED',
+            transactionId: dbOrder.pesapalOrderTrackingId,
+            paymentStatus: dbOrder.status.toLowerCase() as 'completed' | 'failed',
+            amount: dbOrder.amount,
+            currency: dbOrder.currency,
+            message: `Payment status: ${dbOrder.status}`,
+          };
 
-      const response: IAPIResponse<typeof paymentResponse> = {
-        success: true,
-        data: paymentResponse,
-        timestamp: new Date().toISOString(),
-      };
+          const response: IAPIResponse<typeof paymentResponse> = {
+            success: true,
+            data: paymentResponse,
+            timestamp: new Date().toISOString(),
+          };
 
-      return NextResponse.json(response);
+          return NextResponse.json(response);
+        }
+      } catch (dbError) {
+        // Database unavailable or query failed - log and continue with PesaPal API verification
+        console.warn('⚠️ Database query failed, proceeding with PesaPal API verification:', dbError instanceof Error ? dbError.message : 'Unknown error');
+        // Continue to verify with PesaPal API below
+      }
     }
 
     // Step 3: If DB says PENDING (or not found), call PesaPal API (fallback)
@@ -67,19 +77,41 @@ export async function POST(request: Request) {
     // Verify payment with the selected provider
     const verifyResult: IPaymentVerifyResponse = await paymentProvider.verifyPayment(verifyRequest);
 
-    // Step 4: Update database with the latest status from API
-    if (dbOrder) {
+    // Step 4: Create or update database with the latest status from API
+    if (prisma) {
       try {
-        await prisma.order.update({
-          where: { pesapalOrderTrackingId: transactionId },
-          data: {
-            status: verifyResult.paymentStatus.toUpperCase(),
-          },
-        });
+        if (dbOrder) {
+          // Update existing order
+          await prisma.order.update({
+            where: { pesapalOrderTrackingId: transactionId },
+            data: {
+              status: verifyResult.paymentStatus.toUpperCase(),
+            },
+          });
+        } else {
+          // Create new order if it doesn't exist (e.g., if DB was unavailable during payment initiation)
+          await prisma.order.create({
+            data: {
+              id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+              amount: verifyResult.amount,
+              currency: verifyResult.currency || 'KES',
+              status: verifyResult.paymentStatus.toUpperCase(),
+              pesapalOrderTrackingId: transactionId,
+              customerEmail: '', // Not available from verify endpoint
+              customerPhone: '', // Not available from verify endpoint
+              description: verifyResult.message || 'Payment verified',
+              reference: transactionId,
+            },
+          });
+        }
+        console.log('✅ Database updated with payment status:', verifyResult.paymentStatus);
       } catch (dbError) {
         console.error('❌ Database update failed during verification:', dbError);
         // Continue - don't fail the verification if DB update fails
+        // Payment verification from PesaPal API is still valid
       }
+    } else {
+      console.warn('⚠️ Prisma not available - skipping database update');
     }
 
     // Map to the expected response format

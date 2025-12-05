@@ -65,6 +65,9 @@ export default function ContactPage() {
                       <a href="mailto:admin@mysticalvacationsea.com" className="text-gold hover:underline block">
                         admin@mysticalvacationsea.com
                       </a>
+                      <a href="mailto:reservations@mysticalvacationsea.com" className="text-gold hover:underline block">
+                        reservations@mysticalvacationsea.com
+                      </a>
                     </div>
                   </div>
                   <div>

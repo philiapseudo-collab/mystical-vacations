@@ -93,6 +93,11 @@ export default function Footer() {
                 </a>
               </li>
               <li>
+                <a href="mailto:reservations@mysticalvacationsea.com" className="hover:text-gold transition-colors">
+                  reservations@mysticalvacationsea.com
+                </a>
+              </li>
+              <li>
                 <a href="tel:+254718097179" className="hover:text-gold transition-colors">
                   +254 718 097 179
                 </a>

@@ -18,13 +18,20 @@ export default function TestPaymentPage() {
 
     // Start the server action
     startTransition(async () => {
-      const result = await initiateTestPayment();
+      try {
+        const result = await initiateTestPayment();
 
-      // If we get here, it means there was an error
-      // (successful calls will redirect and never return)
-      if (result && !result.success) {
-        // Display error
-        setError(result.error);
+        // If we get here, it means there was an error
+        // (successful calls will redirect and never return)
+        if (result && !result.success) {
+          // Display error
+          setError(result.error);
+        }
+      } catch (err) {
+        // Catch any unexpected errors
+        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.';
+        setError(errorMessage);
+        console.error('Test payment error:', err);
       }
     });
   };
@@ -110,15 +117,21 @@ export default function TestPaymentPage() {
         </button>
 
         {/* Info Text */}
-        <p
+        <div
           style={{
             marginTop: '30px',
             fontSize: '12px',
             color: '#999',
+            textAlign: 'left',
           }}
         >
-          This will redirect you to PesaPal checkout page
-        </p>
+          <p style={{ marginBottom: '10px' }}>
+            This will redirect you to PesaPal checkout page
+          </p>
+          <p style={{ fontSize: '11px', color: '#bbb' }}>
+            <strong>Note:</strong> PesaPal credentials (PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET) must be configured in environment variables for this to work.
+          </p>
+        </div>
       </div>
     </div>
   );

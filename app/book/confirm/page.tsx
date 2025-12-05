@@ -256,6 +256,11 @@ function BookConfirmContent() {
             </a>
           </p>
           <p className="font-semibold">
+            <a href="mailto:reservations@mysticalvacationsea.com" className="text-gold hover:underline">
+              📧 reservations@mysticalvacationsea.com
+            </a>
+          </p>
+          <p className="font-semibold">
             <a href="tel:+254718097179" className="text-gold hover:underline">
               📞 +254 718 097 179
             </a>

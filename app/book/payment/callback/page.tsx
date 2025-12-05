@@ -11,6 +11,8 @@ function CallbackContent() {
   const [status, setStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [message, setMessage] = useState('Processing your payment...');
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 20; // Maximum 20 retries (60 seconds total)
 
   useEffect(() => {
     // Get booking params from URL (passed back from payment gateway)
@@ -66,6 +68,7 @@ function CallbackContent() {
         if (paymentStatus === 'completed') {
           setStatus('success');
           setMessage('Payment completed successfully!');
+          setRetryCount(0); // Reset retry count on success
           
           // Get booking details from sessionStorage or reconstruct from URL
           const stored = sessionStorage.getItem('bookingDetails');
@@ -113,13 +116,26 @@ function CallbackContent() {
             router.push('/book/confirm');
           }, 2000);
         } else if (paymentStatus === 'pending') {
-          setStatus('processing');
-          setMessage('Payment is still being processed. Please wait...');
+          // Check if we've exceeded max retries
+          if (retryCount >= MAX_RETRIES) {
+            setStatus('failed');
+            setMessage(
+              'Payment verification timed out after multiple attempts. Your payment may still be processing on PesaPal\'s side. Please check your M-Pesa account or try again later.'
+            );
+            return;
+          }
           
-          // Retry verification after 3 seconds
+          setStatus('processing');
+          setMessage(`Payment is still being processed. Please wait... (Checking ${retryCount + 1}/${MAX_RETRIES})`);
+          
+          // Increment retry count
+          setRetryCount((prev) => prev + 1);
+          
+          // Retry verification with exponential backoff (3s, 4s, 5s, etc., max 10s)
+          const delay = Math.min(3000 + (retryCount * 1000), 10000);
           setTimeout(() => {
             verifyPayment(txId);
-          }, 3000);
+          }, delay);
         } else {
           setStatus('failed');
           setMessage(data.data.message || 'Payment verification failed.');
@@ -222,13 +238,26 @@ function CallbackContent() {
             </h1>
             <p className="text-slate-600 mb-6">{message}</p>
             {transactionId && (
-              <p className="text-sm text-slate-500 mb-6">
+              <p className="text-sm text-slate-500 mb-4">
                 Transaction ID: <span className="font-mono">{transactionId}</span>
               </p>
             )}
+            {transactionId && (
+              <div className="mb-6">
+                <button
+                  onClick={() => verifyPayment(transactionId)}
+                  className="btn-outline w-full mb-2"
+                >
+                  Check Status Again
+                </button>
+                <p className="text-xs text-slate-400 text-center">
+                  If payment was successful, click above to refresh status
+                </p>
+              </div>
+            )}
             <div className="flex gap-4">
               <Link href="/book/payment" className="flex-1">
-                <button className="btn-outline w-full">Try Again</button>
+                <button className="btn-outline w-full">Try New Payment</button>
               </Link>
               <Link href="/packages" className="flex-1">
                 <button className="btn-primary w-full">Back to Packages</button>
