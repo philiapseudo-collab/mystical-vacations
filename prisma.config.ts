@@ -21,11 +21,26 @@ const databaseUrl = cleanUrl(process.env.DATABASE_URL);
 // Fall back to DATABASE_URL if DIRECT_URL is not set
 const migrationUrl = directUrl || databaseUrl;
 
+// Check if using pooled connection (will cause timeout errors)
+if (migrationUrl) {
+  const isPooledConnection = 
+    migrationUrl.includes(':6543') || 
+    migrationUrl.includes('pooler') || 
+    migrationUrl.includes('pgbouncer=true');
+  
+  if (isPooledConnection && !directUrl) {
+    console.warn('⚠️  WARNING: Migrations are using a pooled connection (port 6543).');
+    console.warn('⚠️  This will cause timeout errors. Please set DIRECT_URL to use port 5432.');
+    console.warn('⚠️  See FIX_MIGRATION_TIMEOUT.md for instructions.');
+  }
+}
+
 if (!migrationUrl) {
   // Only throw in development - Vercel will have env vars set
   if (process.env.NODE_ENV === "development") {
     throw new Error(
-      "DATABASE_URL or DIRECT_URL is required. Please set it in your .env.local file."
+      "DATABASE_URL or DIRECT_URL is required. Please set it in your .env.local file.\n" +
+      "For Supabase: Use DIRECT_URL with port 5432 for migrations, DATABASE_URL with port 6543 for app."
     );
   }
 }

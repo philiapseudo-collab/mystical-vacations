@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           await prisma.order.create({
             data: {
               id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-              amount: verifyResult.amount,
+              amount: verifyResult.amount ?? 0,
               currency: verifyResult.currency || 'KES',
               status: verifyResult.paymentStatus.toUpperCase(),
               pesapalOrderTrackingId: transactionId,
@@ -119,8 +119,8 @@ export async function POST(request: Request) {
       success: verifyResult.success,
       transactionId: verifyResult.transactionId,
       paymentStatus: verifyResult.paymentStatus,
-      amount: verifyResult.amount,
-      currency: verifyResult.currency,
+      amount: verifyResult.amount ?? 0,
+      currency: verifyResult.currency || 'KES',
       message: verifyResult.message,
     };
 

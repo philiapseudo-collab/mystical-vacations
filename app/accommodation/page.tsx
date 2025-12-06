@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
+import Link from 'next/link';
 import type { IAccommodation } from '@/types';
 import { formatPrice } from '@/utils/formatters';
 import { ACCOMMODATION_TYPES } from '@/utils/constants';
@@ -139,13 +140,13 @@ export default function AccommodationPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filtered.map((acc, index) => (
-              <motion.div
-                key={acc.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="card flex flex-col md:flex-row group cursor-pointer overflow-hidden"
-              >
+              <Link key={acc.id} href={`/accommodation/${acc.slug}`}>
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="card flex flex-col md:flex-row group cursor-pointer overflow-hidden"
+                >
                 <div className="relative w-full md:w-1/3 h-64 md:h-auto">
                   <Image
                     src={acc.images[0].url}
@@ -191,9 +192,9 @@ export default function AccommodationPage() {
                         {formatPrice(acc.pricePerNight)}<span className="text-sm text-slate-600">/night</span>
                       </p>
                     </div>
-                    <button className="px-4 py-2 bg-gold hover:bg-gold-dark text-navy font-semibold rounded-md transition-colors">
+                    <span className="px-4 py-2 bg-gold hover:bg-gold-dark text-navy font-semibold rounded-md transition-colors inline-block">
                       View Details
-                    </button>
+                    </span>
                   </div>
                 </div>
               </motion.div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { IExcursion } from '@/types';
 import { formatPrice } from '@/utils/formatters';
@@ -247,7 +248,9 @@ function ExcursionsContent() {
                               <span className="text-slate-500">({exc.reviewCount})</span>
                             </div>
                           </div>
-                          <button className="btn-primary w-full mt-4">Book Experience</button>
+                          <Link href={`/excursions/${exc.slug}`}>
+                            <button className="btn-primary w-full mt-4">View Details</button>
+                          </Link>
                         </div>
                       </div>
                     </motion.div>

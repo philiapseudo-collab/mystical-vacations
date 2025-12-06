@@ -212,11 +212,31 @@ export default function TransportPage() {
                         </div>
                         <button
                           onClick={() => {
-                            sessionStorage.setItem('bookingDetails', JSON.stringify({
-                              type: 'transport',
-                              routeId: route.id,
-                              selectedClass: route.segments[0].class,
-                            }));
+                            const firstSegment = route.segments[0];
+                            const bookingSession = {
+                              type: 'transport' as const,
+                              item: {
+                                id: route.id,
+                                title: route.name,
+                                image: '/images/transport-placeholder.jpg',
+                                price: firstSegment.price,
+                              },
+                              details: {
+                                type: 'transport' as const,
+                                date: new Date().toISOString().split('T')[0],
+                                time: firstSegment.departureTime,
+                                origin: `${firstSegment.departureLocation.city}, ${firstSegment.departureLocation.country}`,
+                                destination: `${firstSegment.arrivalLocation.city}, ${firstSegment.arrivalLocation.country}`,
+                                class: firstSegment.class as 'Economy' | 'First Class',
+                                passengers: 1,
+                                routeId: route.id,
+                              },
+                              guests: {
+                                adults: 1,
+                                children: 0,
+                              },
+                            };
+                            sessionStorage.setItem('bookingDetails', JSON.stringify(bookingSession));
                             router.push('/book/review');
                           }}
                           className="btn-primary whitespace-nowrap"

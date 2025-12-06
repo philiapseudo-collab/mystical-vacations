@@ -2,66 +2,307 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import PriceBreakdownWidget from '@/components/PriceBreakdownWidget';
+import BookingSummaryWrapper from '@/components/booking/summary/BookingSummaryWrapper';
 import { packages } from '@/data/packages';
+import { accommodations } from '@/data/accommodation';
+import { excursions } from '@/data/excursions';
+import { transportRoutes } from '@/data/transport';
+import { parseBookingSession, calculateBookingPrice } from '@/utils/booking-helpers';
+import { getChildPrice } from '@/utils/excursion-helpers';
+import type { BookingSession } from '@/types';
+import type { IPackage, IAccommodation, IExcursion, ITransportRoute } from '@/types';
 
 function BookReviewContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const packageIdFromUrl = searchParams?.get('package');
-  const guestsFromUrl = searchParams?.get('guests');
-  const dateFromUrl = searchParams?.get('dateFrom');
-
-  // Initialize state with URL params first, then sessionStorage, then defaults
-  const [guests, setGuests] = useState(
-    guestsFromUrl ? parseInt(guestsFromUrl) : 2
-  );
-  const [dateFrom, setDateFrom] = useState(dateFromUrl || '');
+  const [session, setSession] = useState<BookingSession | null>(null);
+  const [itemData, setItemData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [specialRequests, setSpecialRequests] = useState('');
 
-  const pkg = packages.find((p) => p.id === packageIdFromUrl);
+  // Form state - varies by booking type
+  const [packageDate, setPackageDate] = useState('');
+  const [packageGuests, setPackageGuests] = useState(2);
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [accommodationGuests, setAccommodationGuests] = useState(2);
+  const [excursionDate, setExcursionDate] = useState('');
+  const [excursionTime, setExcursionTime] = useState('');
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+  const [transportDate, setTransportDate] = useState('');
+  const [transportPassengers, setTransportPassengers] = useState(1);
 
-  // Restore from sessionStorage if URL params are not present
+  // Load and validate booking session
   useEffect(() => {
-    if (!guestsFromUrl || !dateFromUrl) {
-      const stored = sessionStorage.getItem('bookingDetails');
-      if (stored) {
-        const details = JSON.parse(stored);
-        if (!guestsFromUrl) {
-          setGuests(details.guests || 2);
-        }
-        if (!dateFromUrl) {
-          setDateFrom(details.dateFrom || '');
-        }
-        setSpecialRequests(details.specialRequests || '');
+    // Check for package booking from URL params (legacy support)
+    const urlParams = new URLSearchParams(window.location.search);
+    const packageId = urlParams.get('package');
+    const guests = urlParams.get('guests');
+    const dateFrom = urlParams.get('dateFrom');
+
+    // If URL params exist, create a package booking session
+    if (packageId) {
+      const pkg = packages.find((p) => p.id === packageId);
+      if (pkg) {
+        // Extract base price from price breakdown (per person)
+        const basePrice = pkg.price.basePrice || pkg.price.total / (pkg.price.taxes ? 1.16 : 1) || 0;
+        const packageSession: BookingSession = {
+          type: 'package',
+          item: {
+            id: pkg.id,
+            title: pkg.title,
+            image: pkg.images[0]?.url || '',
+            price: basePrice,
+          },
+          details: {
+            type: 'package',
+            date: dateFrom || new Date().toISOString().split('T')[0],
+            guests: guests ? parseInt(guests) : 2,
+          },
+          guests: {
+            adults: guests ? parseInt(guests) : 2,
+            children: 0,
+          },
+        };
+        sessionStorage.setItem('bookingDetails', JSON.stringify(packageSession));
+        // Clean URL
+        router.replace('/book/review', { scroll: false });
+        // Continue with normal flow below
+      } else {
+        sessionStorage.clear();
+        router.push('/');
+        return;
       }
     }
-  }, [guestsFromUrl, dateFromUrl]);
 
-  useEffect(() => {
-    if (!pkg) {
-      router.push('/packages');
+    const stored = sessionStorage.getItem('bookingDetails');
+    if (!stored) {
+      // No booking data - redirect to home
+      sessionStorage.clear();
+      router.push('/');
+      return;
     }
-  }, [pkg, router]);
 
-  if (!pkg) {
-    return <div>Loading...</div>;
+    const parsed = parseBookingSession(stored);
+    if (!parsed) {
+      // Invalid or old format - clear and redirect
+      sessionStorage.clear();
+      router.push('/');
+      // TODO: Show toast notification "Your booking session has expired. Please select your trip again."
+      return;
+    }
+
+    setSession(parsed);
+
+    // Fetch item data based on type
+    let data: any = {};
+    let formDefaults: any = {};
+
+    switch (parsed.type) {
+      case 'package': {
+        const pkg = packages.find((p) => p.id === parsed.item.id);
+        if (!pkg) {
+          sessionStorage.clear();
+          router.push('/');
+          return;
+        }
+        data.package = {
+          title: pkg.title,
+          subtitle: pkg.subtitle,
+          duration: pkg.duration,
+          rating: pkg.rating,
+          reviewCount: pkg.reviewCount,
+        };
+        if (parsed.details.type === 'package') {
+          formDefaults = {
+            date: parsed.details.date,
+            guests: parsed.details.guests,
+          };
+        }
+        break;
+      }
+
+      case 'accommodation': {
+        const acc = accommodations.find((a) => a.id === parsed.item.id);
+        if (!acc) {
+          sessionStorage.clear();
+          router.push('/');
+          return;
+        }
+        data.accommodation = {
+          name: acc.name,
+          location: acc.location,
+          rating: acc.rating,
+          reviewCount: acc.reviewCount,
+        };
+        if (parsed.details.type === 'accommodation') {
+          formDefaults = {
+            checkIn: parsed.details.checkIn,
+            checkOut: parsed.details.checkOut,
+            guests: parsed.details.guests,
+          };
+        }
+        break;
+      }
+
+      case 'excursion': {
+        const exc = excursions.find((e) => e.id === parsed.item.id);
+        if (!exc) {
+          sessionStorage.clear();
+          router.push('/');
+          return;
+        }
+        data.excursion = {
+          title: exc.title,
+          location: exc.location,
+          duration: exc.duration,
+          rating: exc.rating,
+          reviewCount: exc.reviewCount,
+        };
+        if (parsed.details.type === 'excursion') {
+          formDefaults = {
+            date: parsed.details.date,
+            time: parsed.details.time,
+            adults: parsed.details.adults,
+            children: parsed.details.children,
+          };
+        }
+        break;
+      }
+
+      case 'transport': {
+        const route = transportRoutes.find((r) => r.id === parsed.item.id);
+        if (!route) {
+          sessionStorage.clear();
+          router.push('/');
+          return;
+        }
+        data.transport = {
+          routeName: route.name,
+          operator: route.segments[0]?.operator,
+        };
+        if (parsed.details.type === 'transport') {
+          formDefaults = {
+            date: parsed.details.date,
+            passengers: parsed.details.passengers,
+          };
+        }
+        break;
+      }
+    }
+
+    setItemData(data);
+
+    // Set form defaults
+    if (formDefaults.date) {
+      if (parsed.type === 'package') setPackageDate(formDefaults.date);
+      if (parsed.type === 'excursion') setExcursionDate(formDefaults.date);
+      if (parsed.type === 'transport') setTransportDate(formDefaults.date);
+    }
+    if (formDefaults.checkIn) setCheckIn(formDefaults.checkIn);
+    if (formDefaults.checkOut) setCheckOut(formDefaults.checkOut);
+    if (formDefaults.guests) {
+      if (parsed.type === 'package') setPackageGuests(formDefaults.guests);
+      if (parsed.type === 'accommodation') setAccommodationGuests(formDefaults.guests);
+    }
+    if (formDefaults.adults !== undefined) setAdults(formDefaults.adults);
+    if (formDefaults.children !== undefined) setChildren(formDefaults.children);
+    if (formDefaults.time) setExcursionTime(formDefaults.time);
+    if (formDefaults.passengers) setTransportPassengers(formDefaults.passengers);
+
+    setLoading(false);
+  }, [router]);
+
+  if (loading || !session || !itemData) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading booking details...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
-    // Store booking details in sessionStorage (includes specialRequests)
-    sessionStorage.setItem('bookingDetails', JSON.stringify({
-      packageId: pkg.id,
-      guests,
-      dateFrom,
-      specialRequests,
-    }));
-    // Navigate with URL params (critical data only, no specialRequests)
-    router.push(`/book/payment?packageId=${encodeURIComponent(pkg.id)}&guests=${guests}&dateFrom=${encodeURIComponent(dateFrom)}`);
+
+    // Update session with form data
+    const updatedSession: BookingSession = {
+      ...session,
+      details: {
+        ...session.details,
+        ...(session.type === 'package' && {
+          date: packageDate,
+          guests: packageGuests,
+        }),
+        ...(session.type === 'accommodation' && {
+          checkIn,
+          checkOut,
+          nights: Math.ceil(
+            (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)
+          ),
+          guests: accommodationGuests,
+        }),
+        ...(session.type === 'excursion' && {
+          date: excursionDate,
+          time: excursionTime || undefined,
+          adults,
+          children,
+        }),
+        ...(session.type === 'transport' && {
+          date: transportDate,
+          passengers: transportPassengers,
+        }),
+      },
+      guests: {
+        adults: session.type === 'excursion' ? adults : session.guests.adults,
+        children: session.type === 'excursion' ? children : session.guests.children,
+      },
+    };
+
+    sessionStorage.setItem('bookingDetails', JSON.stringify(updatedSession));
+
+    // Navigate to payment
+    const params = new URLSearchParams();
+    params.set('type', session.type);
+    params.set('id', session.item.id);
+    router.push(`/book/payment?${params.toString()}`);
+  };
+
+  const priceBreakdown = calculateBookingPrice(session);
+
+  // Get back link
+  const getBackLink = () => {
+    switch (session.type) {
+      case 'package':
+        return `/packages/${packages.find((p) => p.id === session.item.id)?.slug || ''}`;
+      case 'accommodation':
+        return `/accommodation/${accommodations.find((a) => a.id === session.item.id)?.slug || ''}`;
+      case 'excursion':
+        return `/excursions/${excursions.find((e) => e.id === session.item.id)?.slug || ''}`;
+      case 'transport':
+        return '/transport';
+      default:
+        return '/';
+    }
+  };
+
+  // Get breadcrumb label
+  const getBreadcrumbLabel = () => {
+    switch (session.type) {
+      case 'accommodation':
+        return 'Accommodation';
+      case 'excursion':
+        return 'Excursions';
+      case 'transport':
+        return 'Transport';
+      default:
+        return 'Packages';
+    }
   };
 
   return (
@@ -70,7 +311,9 @@ function BookReviewContent() {
         {/* Breadcrumb */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm">
-            <Link href="/packages" className="text-slate-600 hover:text-gold">Packages</Link>
+            <Link href={getBackLink()} className="text-slate-600 hover:text-gold">
+              {getBreadcrumbLabel()}
+            </Link>
             <span className="text-slate-400">→</span>
             <span className="text-gold font-semibold">Review Booking</span>
             <span className="text-slate-400">→</span>
@@ -84,32 +327,8 @@ function BookReviewContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Package Summary */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-lg shadow-md p-6"
-            >
-              <h2 className="text-2xl font-serif font-bold text-navy mb-4">Your Package</h2>
-              <div className="flex gap-4">
-                <div className="relative w-32 h-32 flex-shrink-0 rounded-lg overflow-hidden">
-                  <Image
-                    src={pkg.images[0].url}
-                    alt={pkg.images[0].alt}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-navy mb-2">{pkg.title}</h3>
-                  <p className="text-slate-600 text-sm mb-2">{pkg.subtitle}</p>
-                  <div className="flex items-center gap-4 text-sm text-slate-600">
-                    <span>⏱️ {pkg.duration} Days</span>
-                    <span>⭐ {pkg.rating} ({pkg.reviewCount})</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+            {/* Booking Summary */}
+            <BookingSummaryWrapper session={session} itemData={itemData} />
 
             {/* Booking Details Form */}
             <motion.div
@@ -120,40 +339,200 @@ function BookReviewContent() {
             >
               <h2 className="text-2xl font-serif font-bold text-navy mb-6">Booking Details</h2>
               <form onSubmit={handleContinue} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label htmlFor="guests" className="block text-sm font-semibold text-navy mb-2">
-                      Number of Guests *
-                    </label>
-                    <input
-                      type="number"
-                      id="guests"
-                      value={guests}
-                      onChange={(e) => setGuests(parseInt(e.target.value))}
-                      min="1"
-                      max={pkg.maxGroupSize}
-                      className="input"
-                      required
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Maximum {pkg.maxGroupSize} guests</p>
+                {/* Package Form */}
+                {session.type === 'package' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="packageDate" className="block text-sm font-semibold text-navy mb-2">
+                        Departure Date *
+                      </label>
+                      <input
+                        type="date"
+                        id="packageDate"
+                        value={packageDate}
+                        onChange={(e) => setPackageDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="packageGuests" className="block text-sm font-semibold text-navy mb-2">
+                        Number of Guests *
+                      </label>
+                      <input
+                        type="number"
+                        id="packageGuests"
+                        value={packageGuests}
+                        onChange={(e) => setPackageGuests(parseInt(e.target.value))}
+                        min="1"
+                        max={packages.find((p) => p.id === session.item.id)?.maxGroupSize || 20}
+                        className="input"
+                        required
+                      />
+                    </div>
                   </div>
+                )}
 
-                  <div>
-                    <label htmlFor="dateFrom" className="block text-sm font-semibold text-navy mb-2">
-                      Departure Date *
-                    </label>
-                    <input
-                      type="date"
-                      id="dateFrom"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="input"
-                      required
-                    />
+                {/* Accommodation Form */}
+                {session.type === 'accommodation' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="checkIn" className="block text-sm font-semibold text-navy mb-2">
+                        Check-in Date *
+                      </label>
+                      <input
+                        type="date"
+                        id="checkIn"
+                        value={checkIn}
+                        onChange={(e) => setCheckIn(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="checkOut" className="block text-sm font-semibold text-navy mb-2">
+                        Check-out Date *
+                      </label>
+                      <input
+                        type="date"
+                        id="checkOut"
+                        value={checkOut}
+                        onChange={(e) => setCheckOut(e.target.value)}
+                        min={checkIn || new Date().toISOString().split('T')[0]}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="accommodationGuests" className="block text-sm font-semibold text-navy mb-2">
+                        Number of Guests *
+                      </label>
+                      <input
+                        type="number"
+                        id="accommodationGuests"
+                        value={accommodationGuests}
+                        onChange={(e) => setAccommodationGuests(parseInt(e.target.value))}
+                        min="1"
+                        max={
+                          accommodations
+                            .find((a) => a.id === session.item.id)
+                            ?.roomTypes.find((r) => r.type === (session.details as any).roomName)?.capacity || 10
+                        }
+                        className="input"
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
+                {/* Excursion Form */}
+                {session.type === 'excursion' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="excursionDate" className="block text-sm font-semibold text-navy mb-2">
+                        Select Date *
+                      </label>
+                      <input
+                        type="date"
+                        id="excursionDate"
+                        value={excursionDate}
+                        onChange={(e) => setExcursionDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="excursionTime" className="block text-sm font-semibold text-navy mb-2">
+                        Select Time (Optional)
+                      </label>
+                      <select
+                        id="excursionTime"
+                        value={excursionTime}
+                        onChange={(e) => setExcursionTime(e.target.value)}
+                        className="input"
+                      >
+                        <option value="">Select time</option>
+                        {excursions
+                          .find((e) => e.id === session.item.id)
+                          ?.availableTimes.map((time) => (
+                            <option key={time} value={time}>
+                              {time}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="adults" className="block text-sm font-semibold text-navy mb-2">
+                        Adults *
+                      </label>
+                      <input
+                        type="number"
+                        id="adults"
+                        value={adults}
+                        onChange={(e) => setAdults(Math.max(0, parseInt(e.target.value) || 0))}
+                        min="0"
+                        max={excursions.find((e) => e.id === session.item.id)?.maxParticipants || 20}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="children" className="block text-sm font-semibold text-navy mb-2">
+                        Children
+                      </label>
+                      <input
+                        type="number"
+                        id="children"
+                        value={children}
+                        onChange={(e) => setChildren(Math.max(0, parseInt(e.target.value) || 0))}
+                        min="0"
+                        max={excursions.find((e) => e.id === session.item.id)?.maxParticipants || 20}
+                        className="input"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">(Ages 3-11)</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Transport Form */}
+                {session.type === 'transport' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="transportDate" className="block text-sm font-semibold text-navy mb-2">
+                        Departure Date *
+                      </label>
+                      <input
+                        type="date"
+                        id="transportDate"
+                        value={transportDate}
+                        onChange={(e) => setTransportDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="input"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="transportPassengers" className="block text-sm font-semibold text-navy mb-2">
+                        Number of Passengers *
+                      </label>
+                      <input
+                        type="number"
+                        id="transportPassengers"
+                        value={transportPassengers}
+                        onChange={(e) => setTransportPassengers(parseInt(e.target.value))}
+                        min="1"
+                        max={20}
+                        className="input"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Special Requests (Global) */}
                 <div>
                   <label htmlFor="specialRequests" className="block text-sm font-semibold text-navy mb-2">
                     Special Requests (Optional)
@@ -176,9 +555,9 @@ function BookReviewContent() {
                 </div>
 
                 <div className="flex gap-4">
-                  <Link href={`/packages/${pkg.slug}`} className="flex-1">
+                  <Link href={getBackLink()} className="flex-1">
                     <button type="button" className="btn-outline w-full">
-                      ← Back to Package
+                      ← Back
                     </button>
                   </Link>
                   <button type="submit" className="btn-primary flex-1">
@@ -191,7 +570,18 @@ function BookReviewContent() {
 
           {/* Right Column - Price Breakdown */}
           <div className="lg:col-span-1">
-            <PriceBreakdownWidget priceBreakdown={pkg.price} itemCount={guests} />
+            {priceBreakdown ? (
+              <PriceBreakdownWidget
+                priceBreakdown={priceBreakdown}
+                itemCount={1}
+              />
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <p className="text-slate-600">
+                  Please complete the booking details to see pricing
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -201,14 +591,17 @@ function BookReviewContent() {
 
 export default function BookReviewPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
-        <p className="text-slate-600">Loading...</p>
-      </div>
-    </div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
       <BookReviewContent />
     </Suspense>
   );
 }
-

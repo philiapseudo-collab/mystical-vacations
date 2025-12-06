@@ -37,11 +37,12 @@ function parseFiltersFromURL(searchParams: URLSearchParams): Partial<ExcursionFi
   // Parse price range
   const priceMin = searchParams.get('price_min');
   const priceMax = searchParams.get('price_max');
-  if (priceMin) {
-    filters.priceRange = { ...filters.priceRange, min: parseInt(priceMin, 10) };
-  }
-  if (priceMax) {
-    filters.priceRange = { ...filters.priceRange, max: parseInt(priceMax, 10) };
+  if (priceMin || priceMax) {
+    const currentRange = filters.priceRange || { min: 0, max: 1000 };
+    filters.priceRange = {
+      min: priceMin ? parseInt(priceMin, 10) : currentRange.min,
+      max: priceMax ? parseInt(priceMax, 10) : currentRange.max,
+    };
   }
 
   return filters;

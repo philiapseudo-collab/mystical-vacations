@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { formatPrice, formatDuration, formatTime } from '@/utils/formatters';
-import { getAmenityIcon } from '@/utils/amenity-icons';
+import { getAmenityIcon } from '@/utils/icon-mapper';
 import { calculateBestValue } from '@/utils/transport-helpers';
 import type { ITransportRoute, ITransportSegment } from '@/types';
 import { CheckCircle } from 'lucide-react';
@@ -51,18 +51,38 @@ export default function TransportComparisonView({
 
   // Handle booking selection
   const handleSelectRoute = (route: ITransportRoute, selectedClass?: 'Economy' | 'First Class') => {
-    // Store booking details in sessionStorage (consistent with packages)
-    const bookingDetails = {
-      type: 'transport',
-      routeId: route.id,
-      selectedClass: selectedClass || route.segments[0].class,
-      origin,
-      destination,
-      // Note: date and passengers would come from search params or form state
-      // For now, we'll store what we have
+    const firstSegment = route.segments[0];
+    const selectedClassType = selectedClass || firstSegment.class;
+    
+    // Find the segment with the selected class (for SGR routes with multiple classes)
+    const segmentForClass = route.segments.find((s) => s.class === selectedClassType) || firstSegment;
+    
+    // Save booking details using new BookingSession schema
+    const bookingSession = {
+      type: 'transport' as const,
+      item: {
+        id: route.id,
+        title: route.name,
+        image: '/images/transport-placeholder.jpg', // Placeholder - should be from route data if available
+        price: segmentForClass.price,
+      },
+      details: {
+        type: 'transport' as const,
+        date: new Date().toISOString().split('T')[0], // Default to today, user will select in review
+        time: firstSegment.departureTime,
+        origin: `${firstSegment.departureLocation.city}, ${firstSegment.departureLocation.country}`,
+        destination: `${firstSegment.arrivalLocation.city}, ${firstSegment.arrivalLocation.country}`,
+        class: selectedClassType as 'Economy' | 'First Class',
+        passengers: 1, // Default, user will update in review
+        routeId: route.id,
+      },
+      guests: {
+        adults: 1,
+        children: 0,
+      },
     };
 
-    sessionStorage.setItem('bookingDetails', JSON.stringify(bookingDetails));
+    sessionStorage.setItem('bookingDetails', JSON.stringify(bookingSession));
     router.push('/book/review');
   };
 

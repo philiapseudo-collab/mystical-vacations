@@ -19,7 +19,7 @@ export default function AboutPage() {
               About <span className="text-gold">Mystical Vacations</span>
             </h1>
             <p className="text-xl text-slate-300">
-              Crafting extraordinary journeys through East Africa&apos;s most breathtaking destinations since 2010
+              Crafting extraordinary journeys through East Africa&apos;s most breathtaking destinations since 2020
             </p>
           </motion.div>
         </div>

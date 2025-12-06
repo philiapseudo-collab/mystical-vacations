@@ -98,6 +98,8 @@ export interface IAccommodation {
     capacity: number;
     pricePerNight: number;
     available: boolean;
+    bedType?: 'King' | 'Twin' | 'Double' | 'Family';
+    image?: IImage;
   }[];
   images: IImage[];
   pricePerNight: number;
@@ -169,7 +171,8 @@ export interface IExcursion {
   description: string;
   duration: number; // in hours
   location: ILocation;
-  price: number;
+  price: number; // Adult price
+  childPrice?: number; // Optional child price
   images: IImage[];
   included: string[];
   notIncluded: string[];
@@ -177,6 +180,9 @@ export interface IExcursion {
   minAge?: number;
   difficultyLevel: 'Easy' | 'Moderate' | 'Strenuous';
   availableTimes: string[]; // e.g., ["09:00", "14:00"]
+  itinerary?: Array<{ time: string; activity: string }>; // Optional timeline
+  requirements?: string[]; // What to carry/prepare
+  languages?: string[]; // Available languages
   rating: number;
   reviewCount: number;
   featured: boolean;
@@ -188,6 +194,58 @@ export interface IExcursion {
 // ============================================
 
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
+export type BookingType = 'package' | 'accommodation' | 'excursion' | 'transport';
+
+/**
+ * Booking details specific to each booking type
+ */
+export type BookingDetails =
+  | { type: 'package'; date: string; guests: number }
+  | {
+      type: 'accommodation';
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      roomId: string;
+      roomName: string;
+      guests: number;
+    }
+  | {
+      type: 'excursion';
+      date: string;
+      time?: string;
+      adults: number;
+      children: number;
+      requirements?: string[];
+    }
+  | {
+      type: 'transport';
+      date: string;
+      time: string;
+      origin: string;
+      destination: string;
+      class: 'Economy' | 'First Class';
+      passengers: number;
+      routeId: string;
+    };
+
+/**
+ * Standardized booking session storage schema
+ */
+export interface BookingSession {
+  type: BookingType;
+  item: {
+    id: string;
+    title: string;
+    image: string; // URL only
+    price: number; // Base price per unit
+  };
+  details: BookingDetails;
+  guests: {
+    adults: number;
+    children: number;
+  };
+}
 
 export interface IBookingItem {
   type: 'package' | 'accommodation' | 'transport' | 'excursion';

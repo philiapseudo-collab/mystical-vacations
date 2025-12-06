@@ -81,9 +81,12 @@ export async function POST(request: Request) {
     // Handle different payment statuses and update database
     const paymentStatus = verificationResult.paymentStatus.toUpperCase();
     
+    // At this point, orderTrackingId is guaranteed to be a string (validated above)
+    const trackingId: string = orderTrackingId;
+    
     // Helper function to create or update order
     const prisma = getPrismaClient();
-    const createOrUpdateOrder = async (status: string) => {
+    const createOrUpdateOrder = async (status: string, trackingId: string) => {
       if (!prisma) {
         console.warn('⚠️ Prisma not available - skipping database update');
         return;
@@ -92,29 +95,36 @@ export async function POST(request: Request) {
       try {
         // Try to find existing order first
         const existingOrder = await prisma.order.findUnique({
-          where: { pesapalOrderTrackingId: orderTrackingId },
+          where: { pesapalOrderTrackingId: trackingId },
         });
 
         if (existingOrder) {
           // Update existing order
           await prisma.order.update({
-            where: { pesapalOrderTrackingId: orderTrackingId },
+            where: { pesapalOrderTrackingId: trackingId },
             data: { status },
           });
           console.log(`✅ Database updated: Order status changed to ${status}`);
         } else {
           // Create new order if it doesn't exist (e.g., DB was down during payment initiation)
+          // Ensure we have required fields before creating
+          const amount = verificationResult.amount ?? 0;
+          if (amount === 0) {
+            console.warn(`⚠️ Cannot create order without amount for OrderTrackingId: ${trackingId}`);
+            return;
+          }
+          
           await prisma.order.create({
             data: {
               id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-              amount: verificationResult.amount,
+              amount: amount,
               currency: verificationResult.currency || 'KES',
               status,
-              pesapalOrderTrackingId: orderTrackingId,
+              pesapalOrderTrackingId: trackingId,
               customerEmail: '', // Not available from webhook
               customerPhone: '', // Not available from webhook
               description: verificationResult.message || `Payment ${status.toLowerCase()}`,
-              reference: orderTrackingId,
+              reference: trackingId,
             },
           });
           console.log(`✅ Database created: New order with status ${status}`);
@@ -128,34 +138,34 @@ export async function POST(request: Request) {
     if (verificationResult.paymentStatus === 'completed') {
       // Payment is confirmed as completed
       console.log('💰 PAYMENT SUCCESS:', {
-        orderTrackingId,
+        orderTrackingId: trackingId,
         amount: verificationResult.amount,
         currency: verificationResult.currency,
         timestamp: new Date().toISOString(),
       });
 
-      await createOrUpdateOrder('COMPLETED');
+      await createOrUpdateOrder('COMPLETED', trackingId);
     } else if (verificationResult.paymentStatus === 'pending') {
       console.log('⏳ Payment Status: PENDING', {
-        orderTrackingId,
+        orderTrackingId: trackingId,
         message: verificationResult.message,
       });
       
-      await createOrUpdateOrder('PENDING');
+      await createOrUpdateOrder('PENDING', trackingId);
     } else if (verificationResult.paymentStatus === 'failed') {
       console.log('❌ Payment Status: FAILED', {
-        orderTrackingId,
+        orderTrackingId: trackingId,
         message: verificationResult.message,
       });
       
-      await createOrUpdateOrder('FAILED');
+      await createOrUpdateOrder('FAILED', trackingId);
     } else if (verificationResult.paymentStatus === 'cancelled') {
       console.log('🚫 Payment Status: CANCELLED', {
-        orderTrackingId,
+        orderTrackingId: trackingId,
         message: verificationResult.message,
       });
       
-      await createOrUpdateOrder('CANCELLED');
+      await createOrUpdateOrder('CANCELLED', trackingId);
     }
 
     // Return 200 OK to acknowledge receipt
@@ -164,7 +174,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message: 'Webhook processed successfully',
-        orderTrackingId,
+        orderTrackingId: trackingId,
         paymentStatus: verificationResult.paymentStatus,
         verified: true,
       },
