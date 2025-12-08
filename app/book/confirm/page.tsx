@@ -25,10 +25,13 @@ function BookConfirmContent() {
       return;
     }
 
+    // TypeScript: bookingRef is guaranteed to be string here after null check
+    const bookingReference: string = bookingRef;
+
     // Fetch booking status from API
     async function fetchBookingStatus() {
       try {
-        const response = await fetch(`/api/booking/${encodeURIComponent(bookingRef)}`);
+        const response = await fetch(`/api/booking/${encodeURIComponent(bookingReference)}`);
         const data = await response.json();
 
         if (data.success && data.data) {
@@ -45,7 +48,7 @@ function BookConfirmContent() {
               pollCount++;
               
               try {
-                const pollResponse = await fetch(`/api/booking/${encodeURIComponent(bookingRef)}`);
+                const pollResponse = await fetch(`/api/booking/${encodeURIComponent(bookingReference)}`);
                 const pollData = await pollResponse.json();
                 
                 if (pollData.success && pollData.data) {
@@ -161,6 +164,22 @@ function BookConfirmContent() {
     return null;
   };
 
+  // Helper to get item display name
+  const getItemDisplayName = (item: IBookingItem, itemDetails: ReturnType<typeof getItemDetails>) => {
+    if (item.itemName) {
+      return item.itemName;
+    }
+    if (itemDetails) {
+      if ('title' in itemDetails) {
+        return itemDetails.title; // IPackage or IExcursion
+      }
+      if ('name' in itemDetails) {
+        return itemDetails.name; // IAccommodation
+      }
+    }
+    return 'Unknown Item';
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 py-12">
       <div className="container mx-auto px-4 max-w-5xl">
@@ -210,7 +229,7 @@ function BookConfirmContent() {
                           {item.type}
                         </span>
                         <h5 className="text-lg font-bold text-navy">
-                          {item.itemName || itemDetails?.title || itemDetails?.name || 'Unknown Item'}
+                          {getItemDisplayName(item, itemDetails)}
                         </h5>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-600">

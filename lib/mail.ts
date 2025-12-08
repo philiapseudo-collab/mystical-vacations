@@ -5,8 +5,20 @@ import { prisma } from '@/lib/prisma';
 import { formatDate } from '@/utils/formatters';
 import type { IBookingItem } from '@/types';
 
-// Initialize Resend SDK
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization of Resend SDK to avoid build-time errors
+// Only initialize when actually needed (at runtime)
+let resendInstance: Resend | null = null;
+
+function getResend(): Resend {
+  if (!resendInstance) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not set');
+    }
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
+}
 
 /**
  * Extract travel date from booking items
@@ -63,7 +75,8 @@ export async function sendBookingReceipt(bookingId: string): Promise<void> {
     const customerName = `${guestDetails.firstName} ${guestDetails.lastName}`;
 
     // Step 3: Extract item names from booking.items
-    const items = booking.items as IBookingItem[];
+    // Cast through unknown first since Prisma JSON fields are JsonValue
+    const items = booking.items as unknown as IBookingItem[];
     const itemNames = items.map((item) => item.itemName);
 
     // Step 4: Determine travel date (earliest dateFrom)
@@ -91,6 +104,7 @@ export async function sendBookingReceipt(bookingId: string): Promise<void> {
 
     // Step 8: Send email via Resend
     // Resend accepts React components directly - pass JSX with props
+    const resend = getResend();
     const { data, error } = await resend.emails.send({
       from: 'reservations@mysticalvacationsea.com',
       to: [guestDetails.email],

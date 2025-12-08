@@ -83,6 +83,7 @@ export async function POST(request: Request) {
 
     // Step 2: Create a Payment record in the DB with status PENDING
     // Get the real amount from the booking (do not trust frontend)
+    // CRUCIAL: Always save the REAL amount to the database, even in sandbox mode
     const paymentAmount = booking.priceBreakdown.total;
     const paymentCurrency = booking.priceBreakdown.currency || 'KES';
 
@@ -98,11 +99,36 @@ export async function POST(request: Request) {
       },
     });
 
-    // Step 3: Call PesaPalProvider.initiatePayment (which internally calls submitOrder to PesaPal)
+    // Step 3: Prepare booking for PesaPal (with sandbox amount override if needed)
+    // Sandbox has strict transaction limits, so we override the amount for testing
+    const isSandbox = process.env.PESAPAL_ENV === 'sandbox';
+    let paymentBooking = booking;
+
+    if (isSandbox) {
+      // Determine sandbox amount based on currency
+      const sandboxAmount = paymentCurrency === 'USD' ? 1 : 100;
+      
+      // Create a modified copy of the booking with overridden amount
+      // Do not modify the original booking object
+      paymentBooking = {
+        ...booking,
+        priceBreakdown: {
+          ...booking.priceBreakdown,
+          total: sandboxAmount,
+        },
+      };
+
+      // Log verbose warning
+      console.warn(
+        `⚠️ SANDBOX MODE: Overriding payment amount from ${paymentAmount} ${paymentCurrency} to ${sandboxAmount} ${paymentCurrency} to bypass limits.`
+      );
+    }
+
+    // Step 4: Call PesaPalProvider.initiatePayment (which internally calls submitOrder to PesaPal)
     const pesapalProvider = new PesaPalProvider();
     
     const { redirectUrl, trackingId } = await pesapalProvider.initiatePayment(
-      booking,
+      paymentBooking,
       {
         email,
         phone,
@@ -111,7 +137,7 @@ export async function POST(request: Request) {
       }
     );
 
-    // Step 4: Update the Payment record with the returned trackingId
+    // Step 5: Update the Payment record with the returned trackingId
     // Critical: This links our internal Payment record to PesaPal's orderTrackingId
     await prisma.payment.update({
       where: { id: paymentRecord.id },
@@ -120,7 +146,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // Step 5: Return redirectUrl and trackingId to the frontend
+    // Step 6: Return redirectUrl and trackingId to the frontend
     const response: IAPIResponse<{ redirectUrl: string; trackingId: string }> = {
       success: true,
       data: {

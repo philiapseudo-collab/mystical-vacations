@@ -35,10 +35,13 @@ function BookPaymentContent() {
       return;
     }
 
+    // TypeScript: bookingReference is guaranteed to be string here after null check
+    const bookingRef: string = bookingReference;
+
     // Fetch booking from API
     async function fetchBooking() {
       try {
-        const response = await fetch(`/api/booking/${encodeURIComponent(bookingReference)}`);
+        const response = await fetch(`/api/booking/${encodeURIComponent(bookingRef)}`);
         const data = await response.json();
 
         if (!data.success || !data.data) {
