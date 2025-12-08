@@ -198,6 +198,7 @@ export default function AccommodationPage() {
                   </div>
                 </div>
               </motion.div>
+              </Link>
             ))}
           </div>
         </div>

@@ -12,6 +12,13 @@ import type {
   IPaymentVerifyRequest,
   IPaymentVerifyResponse,
 } from './types';
+import type {
+  IBooking,
+  IPesaPalAuthResponse,
+  IPesaPalOrderRequest,
+  IPesaPalOrderResponse,
+  IPesaPalTransactionStatusResponse,
+} from '@/types';
 
 /**
  * Simple PesaPal Order Interface
@@ -37,11 +44,6 @@ export interface PesaPalPaymentResponse {
   orderTrackingId: string;
 }
 
-interface PesaPalAccessTokenResponse {
-  token: string;
-  expiryDate: string;
-}
-
 /**
  * Token Cache (In-Memory Singleton)
  * Helps with Vercel serverless warm starts
@@ -55,34 +57,6 @@ let tokenCache: TokenCache = {
   token: null,
   expiryTime: 0,
 };
-
-interface PesaPalSubmitOrderResponse {
-  orderTrackingId?: string;
-  redirectUrl?: string;
-  order_tracking_id?: string; // PesaPal v3 may return snake_case
-  redirect_url?: string; // PesaPal v3 may return snake_case
-  status?: string;
-  message?: string;
-  error?: {
-    type?: string;
-    code?: string;
-    message?: string;
-  };
-}
-
-interface PesaPalTransactionStatusResponse {
-  order_tracking_id: string;
-  payment_method_description: string;
-  amount: number;
-  currency: string;
-  payment_status_description: string;
-  description: string;
-  message: string;
-  payment_account: string;
-  call_back_url: string;
-  status_code: string;
-  merchant_reference: string;
-}
 
 export class PesaPalProvider implements IPaymentProvider {
   readonly name = 'pesapal' as const;
@@ -99,7 +73,7 @@ export class PesaPalProvider implements IPaymentProvider {
   }
 
   /**
-   * Get access token from PesaPal with caching
+   * Get access token from PesaPal with caching (private method)
    * POST /api/Auth/RequestToken
    * 
    * Uses in-memory cache to reduce API calls during Vercel warm starts
@@ -140,7 +114,7 @@ export class PesaPalProvider implements IPaymentProvider {
         throw new Error(`PesaPal Auth Failed: ${response.status} - ${errorText}`);
       }
 
-      const data: PesaPalAccessTokenResponse = await response.json();
+      const data: IPesaPalAuthResponse = await response.json();
 
       if (!data.token) {
         throw new Error('PesaPal Auth Failed: Invalid response - token not found');
@@ -172,6 +146,16 @@ export class PesaPalProvider implements IPaymentProvider {
       }
       throw new Error('PesaPal Auth Failed: Unknown error occurred');
     }
+  }
+
+  /**
+   * Authenticate with PesaPal and get access token
+   * Public method that wraps getAccessToken()
+   * 
+   * @returns Promise<string> - Bearer token for PesaPal API
+   */
+  async authenticate(): Promise<string> {
+    return this.getAccessToken();
   }
 
   /**
@@ -246,14 +230,14 @@ export class PesaPalProvider implements IPaymentProvider {
         throw new Error(`PesaPal Payment Initiation Failed: ${response.status} - ${errorText}`);
       }
 
-      const data: PesaPalSubmitOrderResponse = await response.json();
+      const data: IPesaPalOrderResponse = await response.json();
 
       // Log the raw response for debugging
       console.log('🔍 PesaPal SubmitOrderRequest Raw Response:', JSON.stringify(data, null, 2));
 
-      // Handle both camelCase and snake_case field names
-      const orderTrackingId = data.orderTrackingId || data.order_tracking_id;
-      const redirectUrl = data.redirectUrl || data.redirect_url;
+      // Extract fields (PesaPal v3 returns snake_case)
+      const orderTrackingId = data.order_tracking_id;
+      const redirectUrl = data.redirect_url;
 
       // Check for error in response
       if (data.error) {
@@ -286,13 +270,9 @@ export class PesaPalProvider implements IPaymentProvider {
   }
 
   /**
-   * Initiate payment with PesaPal (IPaymentProvider interface implementation)
-   * Merchant Fees: ~3.5% (Card) / ~2.9% - 3.5% (M-Pesa)
-   * Settlement: T+2 Days (Bank) or Real-time to Openfloat
-   * 
-   * POST /api/Transactions/SubmitOrderRequest
+   * Internal method for interface-based payment initiation (backward compatibility)
    */
-  async initiatePayment(
+  private async initiatePaymentForInterface(
     request: IPaymentInitiateRequest
   ): Promise<IPaymentInitiateResponse> {
     try {
@@ -330,18 +310,178 @@ export class PesaPalProvider implements IPaymentProvider {
   }
 
   /**
-   * Verify payment status with PesaPal
-   * GET /api/Transactions/GetTransactionStatus?orderTrackingId={orderTrackingId}
+   * Initiate payment with PesaPal using IBooking
+   * Creates a PesaPal order and returns redirect URL and tracking ID
+   * 
+   * @param booking - IBooking object with booking details
+   * @param user - User details (email, phone, firstName, lastName)
+   * @returns Object with redirectUrl and trackingId
+   * 
+   * This is the primary method for initiating payments from a booking.
+   * The interface method initiatePayment(request) is kept for backward compatibility.
    */
-  async verifyPayment(
-    request: IPaymentVerifyRequest
-  ): Promise<IPaymentVerifyResponse> {
+  async initiatePayment(
+    booking: IBooking,
+    user: {
+      email: string;
+      phone: string;
+      firstName: string;
+      lastName: string;
+    }
+  ): Promise<{ redirectUrl: string; trackingId: string }>;
+  
+  /**
+   * Initiate payment with PesaPal (IPaymentProvider interface implementation)
+   * Overloaded method signature for backward compatibility
+   */
+  async initiatePayment(
+    request: IPaymentInitiateRequest
+  ): Promise<IPaymentInitiateResponse>;
+  
+  /**
+   * Implementation of initiatePayment with method overloading
+   */
+  async initiatePayment(
+    bookingOrRequest: IBooking | IPaymentInitiateRequest,
+    user?: {
+      email: string;
+      phone: string;
+      firstName: string;
+      lastName: string;
+    }
+  ): Promise<{ redirectUrl: string; trackingId: string } | IPaymentInitiateResponse> {
+    // Check if this is the booking-based call (has user parameter)
+    if (user && 'bookingReference' in bookingOrRequest) {
+      const booking = bookingOrRequest as IBooking;
+      return this.initiatePaymentFromBooking(booking, user);
+    }
+    
+    // Otherwise, it's the interface method call
+    const request = bookingOrRequest as IPaymentInitiateRequest;
+    return this.initiatePaymentForInterface(request);
+  }
+
+  /**
+   * Internal method for booking-based payment initiation
+   */
+  private async initiatePaymentFromBooking(
+    booking: IBooking,
+    user: {
+      email: string;
+      phone: string;
+      firstName: string;
+      lastName: string;
+    }
+  ): Promise<{ redirectUrl: string; trackingId: string }> {
+    try {
+      // Get access token
+      const accessToken = await this.getAccessToken();
+
+      // Get callback URL
+      const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payments/ipn/pesapal`;
+
+      // Get IPN ID from environment
+      const ipnId = process.env.PESAPAL_IPN_ID;
+
+      // Use booking reference as order ID
+      const orderId = booking.bookingReference;
+
+      // Get total amount from price breakdown
+      const amount = booking.priceBreakdown.total;
+      const currency = booking.priceBreakdown.currency || 'KES';
+
+      // Prepare request payload according to PesaPal API 3.0
+      const payload: IPesaPalOrderRequest = {
+        id: orderId,
+        currency: currency,
+        amount: amount,
+        description: `Booking Ref: ${booking.bookingReference}`,
+        callback_url: callbackUrl,
+        redirect_mode: 'PARENT_WINDOW',
+        notification_id: ipnId || '',
+        billing_address: {
+          email_address: user.email,
+          phone_number: user.phone,
+          country_code: 'KE', // Default to Kenya
+          first_name: user.firstName,
+          middle_name: '',
+          last_name: user.lastName,
+          line_1: '',
+          line_2: '',
+          city: '',
+          state: '',
+          postal_code: '',
+          zip_code: '',
+        },
+      };
+
+      const baseUrl = this.getBaseUrl();
+      const submitUrl = `${baseUrl}/api/Transactions/SubmitOrderRequest`;
+
+      const response = await fetch(submitUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`PesaPal Payment Initiation Failed: ${response.status} - ${errorText}`);
+      }
+
+      const data: IPesaPalOrderResponse = await response.json();
+
+      // Log the raw response for debugging
+      console.log('🔍 PesaPal SubmitOrderRequest Raw Response:', JSON.stringify(data, null, 2));
+
+      // Check for error in response
+      if (data.error) {
+        throw new Error(
+          `PesaPal Payment Initiation Failed: ${data.error.message || data.error.type || 'Unknown error'}`
+        );
+      }
+
+      if (!data.order_tracking_id || !data.redirect_url) {
+        console.error('❌ PesaPal Response Missing Fields:', {
+          hasOrderTrackingId: !!data.order_tracking_id,
+          hasRedirectUrl: !!data.redirect_url,
+          fullResponse: data,
+        });
+        throw new Error(
+          'PesaPal Payment Initiation Failed: Invalid response - missing order_tracking_id or redirect_url. Check server logs for full response.'
+        );
+      }
+
+      return {
+        redirectUrl: data.redirect_url,
+        trackingId: data.order_tracking_id,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to initiate PesaPal payment: Unknown error occurred');
+    }
+  }
+
+  /**
+   * Get transaction status from PesaPal
+   * GET /api/Transactions/GetTransactionStatus?orderTrackingId={trackingId}
+   * 
+   * @param trackingId - PesaPal order tracking ID
+   * @returns Transaction status response
+   */
+  async getTransactionStatus(trackingId: string): Promise<IPesaPalTransactionStatusResponse> {
     try {
       // Get access token
       const accessToken = await this.getAccessToken();
 
       const baseUrl = this.getBaseUrl();
-      const verifyUrl = `${baseUrl}/api/Transactions/GetTransactionStatus?orderTrackingId=${request.transactionId}`;
+      const verifyUrl = `${baseUrl}/api/Transactions/GetTransactionStatus?orderTrackingId=${trackingId}`;
 
       const response = await fetch(verifyUrl, {
         method: 'GET',
@@ -353,10 +493,29 @@ export class PesaPalProvider implements IPaymentProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`PesaPal Verification Failed: ${response.status} - ${errorText}`);
+        throw new Error(`PesaPal Transaction Status Failed: ${response.status} - ${errorText}`);
       }
 
-      const data: PesaPalTransactionStatusResponse = await response.json();
+      const data: IPesaPalTransactionStatusResponse = await response.json();
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to get PesaPal transaction status: Unknown error occurred');
+    }
+  }
+
+  /**
+   * Verify payment status with PesaPal (IPaymentProvider interface implementation)
+   * GET /api/Transactions/GetTransactionStatus?orderTrackingId={orderTrackingId}
+   */
+  async verifyPayment(
+    request: IPaymentVerifyRequest
+  ): Promise<IPaymentVerifyResponse> {
+    try {
+      // Use getTransactionStatus internally
+      const data = await this.getTransactionStatus(request.transactionId);
 
       // Map PesaPal status to our payment status
       const statusCode = data.status_code;

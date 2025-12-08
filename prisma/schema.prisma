@@ -21,18 +21,40 @@ model Order {
 }
 
 model Booking {
-  id               String   @id @default(uuid())
-  bookingReference String   @unique
-  items            Json     // Store IBookingItem[] as JSON
-  guestDetails     Json     // Store guest details as JSON
-  priceBreakdown   Json     // Store IPriceBreakdown as JSON
-  status           String   @default("pending")
-  paymentStatus    String   @default("pending")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id               String    @id @default(uuid())
+  bookingReference String    @unique
+  items            Json      // Store IBookingItem[] as JSON
+  guestDetails     Json      // Store guest details as JSON
+  priceBreakdown   Json      // Store IPriceBreakdown as JSON
+  status           String    @default("pending")
+  paymentStatus    String    @default("pending")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  payments         Payment[]
 
   @@index([bookingReference])
   @@map("bookings")
+}
+
+model Payment {
+  id               String   @id @default(uuid())
+  bookingId        String
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount           Float
+  currency         String   @default("KES")
+  status           String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  provider         String   @default("PESAPAL")
+  trackingId       String?  @unique
+  merchantReference String
+  paymentMethod    String?  // e.g., "MPESA", "VISA"
+  paymentAccount   String?  // The phone number/masked card used
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([trackingId])
+  @@index([merchantReference])
+  @@map("payments")
 }
 
 model SGRTicket {

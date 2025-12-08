@@ -314,6 +314,87 @@ export interface IPaymentResponse {
 }
 
 // ============================================
+// PESAPAL V3 INTEGRATION
+// ============================================
+
+/**
+ * PesaPal Authentication Response
+ * Response from POST /api/Auth/RequestToken
+ */
+export interface IPesaPalAuthResponse {
+  token: string;
+  expiryDate: string;
+  error?: {
+    type?: string;
+    code?: string;
+    message?: string;
+  };
+}
+
+/**
+ * PesaPal Order Request Payload
+ * Payload for POST /api/Transactions/SubmitOrderRequest
+ */
+export interface IPesaPalOrderRequest {
+  id: string; // Unique order ID (typically booking reference)
+  currency: string; // "KES" or "USD"
+  amount: number;
+  description: string;
+  callback_url: string;
+  redirect_mode?: string; // e.g., "PARENT_WINDOW"
+  notification_id?: string; // IPN ID
+  billing_address: {
+    email_address: string;
+    phone_number: string;
+    country_code?: string;
+    first_name: string;
+    middle_name?: string;
+    last_name: string;
+    line_1?: string;
+    line_2?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    zip_code?: string;
+  };
+}
+
+/**
+ * PesaPal Order Response
+ * Response from POST /api/Transactions/SubmitOrderRequest
+ */
+export interface IPesaPalOrderResponse {
+  order_tracking_id: string;
+  merchant_reference: string;
+  redirect_url: string;
+  status?: string;
+  message?: string;
+  error?: {
+    type?: string;
+    code?: string;
+    message?: string;
+  };
+}
+
+/**
+ * PesaPal Transaction Status Response
+ * Response from GET /api/Transactions/GetTransactionStatus
+ */
+export interface IPesaPalTransactionStatusResponse {
+  order_tracking_id: string;
+  payment_method_description: string;
+  amount: number;
+  currency: string;
+  payment_status_description: string;
+  description: string;
+  message: string;
+  payment_account: string;
+  call_back_url: string;
+  status_code: string; // "1" = Completed, "2" = Pending, "3"/"4" = Failed, "5" = Cancelled
+  merchant_reference: string;
+}
+
+// ============================================
 // SGR (Standard Gauge Railway) ABSTRACTION
 // ============================================
 

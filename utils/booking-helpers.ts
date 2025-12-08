@@ -11,6 +11,7 @@ export function calculateBookingPrice(session: BookingSession): IPriceBreakdown 
   switch (session.type) {
     case 'package': {
       // Package: price per person * guests
+      if (session.details.type !== 'package') return null;
       const subtotal = basePrice * session.details.guests;
       const serviceFee = subtotal * 0.05; // 5% service fee
       const taxes = subtotal * 0.16; // 16% VAT
@@ -25,6 +26,7 @@ export function calculateBookingPrice(session: BookingSession): IPriceBreakdown 
 
     case 'accommodation': {
       // Accommodation: price per night * nights (per room, assume 1 room)
+      if (session.details.type !== 'accommodation') return null;
       const subtotal = basePrice * session.details.nights;
       const taxes = subtotal * 0.16; // 16% VAT
       return {
@@ -38,10 +40,11 @@ export function calculateBookingPrice(session: BookingSession): IPriceBreakdown 
 
     case 'excursion': {
       // Excursion: (adult price * adults) + (child price * children)
-      if (adults === 0 && children === 0) return null;
+      if (session.details.type !== 'excursion') return null;
+      if (session.details.adults === 0 && session.details.children === 0) return null;
       // Child price defaults to 50% of adult price if not specified
       const childPriceValue = getChildPrice(basePrice);
-      const subtotal = basePrice * adults + childPriceValue * children;
+      const subtotal = basePrice * session.details.adults + childPriceValue * session.details.children;
       const taxes = subtotal * 0.16; // 16% VAT
       return {
         basePrice: subtotal,
@@ -54,6 +57,7 @@ export function calculateBookingPrice(session: BookingSession): IPriceBreakdown 
 
     case 'transport': {
       // Transport: ticket price * passengers
+      if (session.details.type !== 'transport') return null;
       const subtotal = basePrice * session.details.passengers;
       const taxes = subtotal * 0.16; // 16% VAT
       return {

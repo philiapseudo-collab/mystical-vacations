@@ -12,6 +12,7 @@ import { excursions } from '@/data/excursions';
 import { transportRoutes } from '@/data/transport';
 import { parseBookingSession, calculateBookingPrice } from '@/utils/booking-helpers';
 import { getChildPrice } from '@/utils/excursion-helpers';
+import { generateBookingReference } from '@/utils/formatters';
 import type { BookingSession } from '@/types';
 import type { IPackage, IAccommodation, IExcursion, ITransportRoute } from '@/types';
 
@@ -38,6 +39,8 @@ function BookReviewContent() {
   // Load and validate booking session
   useEffect(() => {
     // Check for package booking from URL params (legacy support)
+    // Use typeof window check for SSR safety
+    if (typeof window === 'undefined') return;
     const urlParams = new URLSearchParams(window.location.search);
     const packageId = urlParams.get('package');
     const guests = urlParams.get('guests');
@@ -227,53 +230,221 @@ function BookReviewContent() {
     );
   }
 
-  const handleContinue = (e: React.FormEvent) => {
+  const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Update session with form data
-    const updatedSession: BookingSession = {
-      ...session,
-      details: {
-        ...session.details,
-        ...(session.type === 'package' && {
+    // Update session with form data - use proper type narrowing
+    let updatedSession: BookingSession;
+    
+    if (session.type === 'package') {
+      updatedSession = {
+        ...session,
+        details: {
+          type: 'package',
           date: packageDate,
           guests: packageGuests,
-        }),
-        ...(session.type === 'accommodation' && {
+        },
+        guests: {
+          adults: packageGuests,
+          children: 0,
+        },
+      };
+    } else if (session.type === 'accommodation') {
+      updatedSession = {
+        ...session,
+        details: {
+          type: 'accommodation',
           checkIn,
           checkOut,
           nights: Math.ceil(
             (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)
           ),
+          roomId: session.details.type === 'accommodation' ? session.details.roomId : '',
+          roomName: session.details.type === 'accommodation' ? session.details.roomName : '',
           guests: accommodationGuests,
-        }),
-        ...(session.type === 'excursion' && {
+        },
+        guests: {
+          adults: accommodationGuests,
+          children: 0,
+        },
+      };
+    } else if (session.type === 'excursion') {
+      updatedSession = {
+        ...session,
+        details: {
+          type: 'excursion',
           date: excursionDate,
           time: excursionTime || undefined,
           adults,
           children,
-        }),
-        ...(session.type === 'transport' && {
+          requirements: session.details.type === 'excursion' ? session.details.requirements : undefined,
+        },
+        guests: {
+          adults,
+          children,
+        },
+      };
+    } else {
+      // transport
+      updatedSession = {
+        ...session,
+        details: {
+          type: 'transport',
           date: transportDate,
+          time: session.details.type === 'transport' ? session.details.time : '',
+          origin: session.details.type === 'transport' ? session.details.origin : '',
+          destination: session.details.type === 'transport' ? session.details.destination : '',
+          class: session.details.type === 'transport' ? session.details.class : 'Economy',
           passengers: transportPassengers,
-        }),
-      },
-      guests: {
-        adults: session.type === 'excursion' ? adults : session.guests.adults,
-        children: session.type === 'excursion' ? children : session.guests.children,
-      },
-    };
+          routeId: session.details.type === 'transport' ? session.details.routeId : '',
+        },
+        guests: {
+          adults: transportPassengers,
+          children: 0,
+        },
+      };
+    }
 
     sessionStorage.setItem('bookingDetails', JSON.stringify(updatedSession));
 
-    // Navigate to payment
-    const params = new URLSearchParams();
-    params.set('type', session.type);
-    params.set('id', session.item.id);
-    router.push(`/book/payment?${params.toString()}`);
+    // Calculate price breakdown
+    const priceBreakdown = getPriceBreakdown();
+    if (!priceBreakdown) {
+      alert('Please complete all required fields to proceed.');
+      return;
+    }
+
+    // Build booking items array
+    const bookingItems = [{
+      type: session.type,
+      itemId: session.item.id,
+      itemName: session.item.title,
+      quantity: session.type === 'package' 
+        ? (session.details.type === 'package' ? session.details.guests : 1)
+        : session.type === 'accommodation'
+        ? 1
+        : session.type === 'excursion'
+        ? (session.details.type === 'excursion' ? session.details.adults + session.details.children : 1)
+        : (session.details.type === 'transport' ? session.details.passengers : 1),
+      pricePerUnit: session.item.price,
+      subtotal: priceBreakdown.basePrice,
+      dateFrom: session.type === 'package' 
+        ? (session.details.type === 'package' ? session.details.date : undefined)
+        : session.type === 'accommodation'
+        ? (session.details.type === 'accommodation' ? session.details.checkIn : undefined)
+        : session.type === 'excursion'
+        ? (session.details.type === 'excursion' ? session.details.date : undefined)
+        : (session.details.type === 'transport' ? session.details.date : undefined),
+      dateTo: session.type === 'accommodation' && session.details.type === 'accommodation'
+        ? session.details.checkOut
+        : undefined,
+      specialRequests: specialRequests || undefined,
+    }];
+
+    // Create guest details placeholder (will be filled on payment page)
+    const guestDetails = {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      nationality: '',
+      specialRequests: specialRequests || undefined,
+    };
+
+    try {
+      // Generate booking reference
+      const bookingReference = generateBookingReference();
+
+      // Create booking in database
+      const response = await fetch('/api/booking/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bookingReference,
+          items: bookingItems,
+          guestDetails,
+          priceBreakdown,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success || !data.data) {
+        throw new Error(data.error?.message || 'Failed to create booking');
+      }
+
+      // Navigate to payment with booking reference
+      router.push(`/book/payment?bookingReference=${encodeURIComponent(bookingReference)}`);
+    } catch (error) {
+      console.error('Booking creation error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to create booking. Please try again.');
+    }
   };
 
-  const priceBreakdown = calculateBookingPrice(session);
+  // Calculate price breakdown - for excursions, we need to fetch child price from excursion data
+  // Use current form state for real-time price updates
+  const getPriceBreakdown = () => {
+    if (session.type === 'excursion') {
+      const exc = excursions.find((e) => e.id === session.item.id);
+      if (exc) {
+        // Use current form state (adults, children) for real-time calculation
+        // Fallback to session details if form hasn't been updated
+        const currentAdults = adults || (session.details.type === 'excursion' ? session.details.adults : session.guests.adults);
+        const currentChildren = children || (session.details.type === 'excursion' ? session.details.children : session.guests.children);
+        
+        // Require at least one guest and a date
+        if ((currentAdults === 0 && currentChildren === 0) || !excursionDate) return null;
+        
+        // Use the excursion's childPrice if available
+        const childPriceValue = getChildPrice(exc.price, exc.childPrice);
+        const subtotal = exc.price * currentAdults + childPriceValue * currentChildren;
+        const taxes = subtotal * 0.16;
+        return {
+          basePrice: subtotal,
+          serviceFee: 0,
+          taxes,
+          total: subtotal + taxes,
+          currency: 'USD' as const,
+        };
+      }
+    } else if (session.type === 'accommodation') {
+      // For accommodation, require check-in and check-out dates
+      if (!checkIn || !checkOut) return null;
+      // Recalculate with current form state
+      const nights = Math.ceil(
+        (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      if (nights <= 0) return null;
+      return calculateBookingPrice({
+        ...session,
+        details: {
+          ...session.details,
+          type: 'accommodation',
+          nights,
+        } as any,
+      });
+    } else if (session.type === 'package') {
+      // For packages, require date
+      if (!packageDate) return null;
+      return calculateBookingPrice(session);
+    } else if (session.type === 'transport') {
+      // For transport, require date
+      if (!transportDate) return null;
+      return calculateBookingPrice({
+        ...session,
+        details: {
+          ...session.details,
+          type: 'transport',
+          passengers: transportPassengers,
+        } as any,
+      });
+    }
+    return calculateBookingPrice(session);
+  };
+
+  const priceBreakdown = getPriceBreakdown();
 
   // Get back link
   const getBackLink = () => {
